@@ -71,7 +71,7 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 - **Browser:** A recent version of Chrome, Edge, Firefox, or Safari.
 - **Internet:** Required for the initial downloads. The core app can run locally after installation; see [Privacy and offline behavior](#privacy-and-offline-behavior).
 
-You do **not** need a GPU, Docker, a database server, or a paid API key to use the basic app.
+You do **not** need a GPU, Docker, a database server, or a paid API key. Ollama and a local model are required.
 
 ## What you need to install
 
@@ -423,7 +423,7 @@ Benthoven is designed to run locally:
 - The dashboard binds to `127.0.0.1` by default, so it is intended for access from the same computer.
 - Tasks, preferences, sessions, and captured text are stored in a local SQLite database. By default, the database is `data/benthoven.db` in the project directory.
 - Tesseract OCR runs on the computer.
-- The rule-based extraction path does not require a hosted AI service.
+- Task extraction uses the required local Ollama model; no hosted AI API is used.
 - Ollama sends model requests to the local Ollama service rather than a hosted model API. Ollama and its configured model are required for startup.
 
 **Important:** “Local-first” does not automatically mean every operation is offline. You need internet to install dependencies and download models. The app also checks internet reachability for its privacy/status display. Do not upload sensitive school, personal, or other confidential information unless you understand and accept how your local computer and files are managed.
@@ -526,14 +526,14 @@ Benthoven-StudentAssistant-main/
 - Extracted task names, subjects, dates, and time estimates may be wrong; user review is essential.
 - OCR quality depends on image clarity and the language data installed with Tesseract.
 - PDF and office-document parsing are not implemented in the current MVP.
-- Local AI performance varies by device and model; the rule-based fallback is less flexible with unusual wording.
+- Local AI performance varies by device and model. Benthoven does not silently fall back to rule-based extraction when Ollama is unavailable.
 - Scheduling results depend on the accuracy of task estimates, availability, commitments, and deadlines entered by the student.
 - Calendar export creates an `.ics` file; it does not automatically sync changes with an external calendar.
 - This is a local app, not a hosted multi-user service. Avoid exposing it to a public network without adding appropriate authentication and security controls.
 
 ## Development notes
 
-- Keep the core workflow usable without Ollama.
+- Keep Ollama and the configured local model as required dependencies; never silently fall back to rule-based extraction or a cloud API.
 - Treat extracted values as untrusted until the student verifies them.
 - Prefer deterministic scheduling behavior that can be tested.
 - Run `python -m pytest tests -q` after changes to extraction, dates, scheduling, or storage.
