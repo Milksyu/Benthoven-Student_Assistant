@@ -9,6 +9,8 @@ def _fmt(dt: datetime) -> str:
 
 
 def _esc(s: str) -> str:
+    # Normalize all line endings before escaping; raw CR/LF must never create new ICS properties.
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
     return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
@@ -21,7 +23,7 @@ def sessions_to_ics(sessions: list[dict]) -> str:
         lines += [
             "BEGIN:VEVENT", f"UID:benthoven-session-{s['id']}@local", f"DTSTAMP:{stamp}",
             f"DTSTART:{_fmt(start)}", f"DTEND:{_fmt(end)}",
-            f"SUMMARY:{_esc(s['task_name'])} ({s['subject'] or 'Study'})",
+            f"SUMMARY:{_esc(s['task_name'])} ({_esc(s['subject'] or 'Study')})",
             f"DESCRIPTION:{_esc(s['goal'])}", "END:VEVENT",
         ]
     lines.append("END:VCALENDAR")
