@@ -27,7 +27,7 @@ def line(ok: bool | None, msg: str, required: bool = True) -> None:
 
 
 print(f"Python {sys.version.split()[0]}")
-for mod in ("gradio", "pandas", "pytesseract", "PIL", "requests"):
+for mod in ("gradio", "pandas", "rapidocr", "onnxruntime", "PIL", "requests"):
     try:
         __import__(mod)
         line(True, f"package '{mod}' installed")
@@ -36,10 +36,10 @@ for mod in ("gradio", "pandas", "pytesseract", "PIL", "requests"):
 
 from benthoven import storage as db
 from benthoven.extractor import extract_tasks, ollama_selftest, ollama_status
-from benthoven.ocr import tesseract_available
+from benthoven.ocr import ocr_available
 from benthoven.scheduler import schedule
 
-line(tesseract_available(), "Tesseract OCR found (needed for photos)", required=False)
+line(ocr_available(), "Local RapidOCR dependencies installed (needed for photos)", required=False)
 prefs = db.get_prefs()
 st = ollama_status(prefs["ollama_url"], prefs["ollama_model"])
 line(st["running"], "Ollama server running on localhost")
