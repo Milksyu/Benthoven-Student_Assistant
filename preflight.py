@@ -42,13 +42,14 @@ from benthoven.scheduler import schedule
 line(tesseract_available(), "Tesseract OCR found (needed for photos)", required=False)
 prefs = db.get_prefs()
 st = ollama_status(prefs["ollama_url"], prefs["ollama_model"])
-line(st["running"], "Ollama server running on localhost", required=False)
-line(bool(st["model_ready"]), f"model '{prefs['ollama_model']}' installed", required=False)
+line(st["running"], "Ollama server running on localhost")
+line(bool(st["model_ready"]), f"model '{prefs['ollama_model']}' installed")
 if st["running"] and st["model_ready"]:
     r = ollama_selftest(prefs["ollama_url"], prefs["ollama_model"])
-    line(r["ok"], f"local inference works ({r.get('seconds', '?')} s)" if r["ok"] else r["error"], required=False)
+    line(r["ok"], f"local inference works ({r.get('seconds', '?')} s)" if r["ok"] else r["error"])
 else:
-    print("      -> Without Ollama the app uses its rule-based fallback; for judging, make the local AI work.")
+    line(False, "Local AI inference skipped because Ollama or the configured model is unavailable")
+    print("      -> Install/start Ollama and pull the configured model. Benthoven requires local AI and does not silently fall back to rules or a cloud API.")
 
 today = date(2026, 10, 9)
 tasks_found = []
