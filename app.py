@@ -1,7 +1,7 @@
 """Benthoven: offline academic planner. Run with:  python app.py
 
 Local-first: binds to 127.0.0.1 only, stores data in ./data/benthoven.db, calls only
-localhost services (Tesseract binary, Ollama on localhost:11434).
+localhost services (local RapidOCR inference, Ollama on localhost:11434).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from benthoven.dates import parse_due_date
 from benthoven.extractor import extract_tasks, ollama_status
 from benthoven.ics import sessions_to_ics
 from benthoven.narrator import narrate
-from benthoven.ocr import read_document, tesseract_available
+from benthoven.ocr import ocr_available, read_document
 from benthoven.panels import calendar_html, header_html, tracker_html, upnext_html
 from benthoven.scheduler import diff_plans, schedule, summarize
 
@@ -414,7 +414,7 @@ def privacy_status() -> str:
     return f"""
 | Component | Status |
 |---|---|
-| Tesseract OCR (local binary) | {ok(tesseract_available())} {'installed' if tesseract_available() else 'not found: images cannot be read, but pasted text still works'} |
+| Local OCR (RapidOCR + ONNX Runtime) | {ok(ocr_available())} {'installed' if ocr_available() else 'missing: install Python requirements to enable image text extraction'} |
 | Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: AI features unavailable; start Ollama'} |
 | Model `{p['ollama_model']}` | {ok(bool(ol['model_ready']))} {'ready' if ol['model_ready'] else 'not pulled yet (run: ollama pull ' + p['ollama_model'] + ')'} |
 | Scheduling engine | ✅ plain Python, fully local |
@@ -437,7 +437,7 @@ def _status() -> dict:
     if time.time() - _status_cache["t"] > 20 or _status_cache["v"] is None:
         p = db.get_prefs()
         ol = ollama_status(p["ollama_url"], p["ollama_model"])
-        _status_cache.update(t=time.time(), v={"ocr": tesseract_available(),
+        _status_cache.update(t=time.time(), v={"ocr": ocr_available(),
                                                "ai": bool(ol["running"] and ol["model_ready"]),
                                                "net": internet_reachable()})
     return _status_cache["v"]
@@ -455,7 +455,14 @@ def refresh_panels(month_offset: int = 0):
 
 
 CSS = """
-.gradio-container{max-width:1480px!important;padding:20px 28px 40px!important;background:#f7f8f6!important}
+:root{color-scheme:light!important}
+html,body{background:#f7f8f6!important;color:#303630!important}
+.gradio-container{max-width:1480px!important;padding:20px 28px 40px!important;background:#f7f8f6!important;color:#303630!important;color-scheme:light!important;
+  --body-background-fill:#f7f8f6!important;--background-fill-primary:#fff!important;--background-fill-secondary:#fff!important;
+  --block-background-fill:#fff!important;--input-background-fill:#fff!important;--body-text-color:#303630!important;
+  --block-label-text-color:#525b54!important;--border-color-primary:#e1e5e0!important;--neutral-50:#f8faf7!important}
+.gradio-container button{border-radius:5px!important;box-shadow:none!important}
+.gradio-container input,.gradio-container textarea{background:#fff!important;color:#303630!important}
 .bv-cover{height:178px;position:relative;border-radius:12px 12px 0 0;overflow:hidden;
   background:radial-gradient(circle at 88% 24%,rgba(73,132,103,.20) 0 2px,transparent 3px 100%),
   radial-gradient(circle at 80% 32%,rgba(73,132,103,.13) 0 22px,transparent 23px 100%),
@@ -525,7 +532,7 @@ NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My task
 
 # ---------------------------------------------------------------------- UI
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Benthoven") as demo:
+    with gr.Blocks(title="Benthoven", theme=gr.themes.Soft(primary_hue="green", secondary_hue="green", neutral_hue="stone")) as demo:
         cal_offset = gr.State(0)
         gr.HTML('<div class="bv-cover" aria-hidden="true"><div class="bv-cover-mark"><i></i><i></i><i></i><i></i></div></div>')
         gr.HTML('<div class="bv-page-title">Task Manager</div>')
@@ -535,12 +542,6 @@ def build_ui() -> gr.Blocks:
             # ---------------- left column: chart + calendar
             with gr.Column(scale=3, min_width=225, elem_classes="bv-sidebar"):
                 tracker = gr.HTML()
-                calendar_p = gr.HTML()
-                with gr.Row(elem_classes="bv-calnav"):
-                    cal_prev = gr.Button("◀", size="sm")
-                    cal_today = gr.Button("Today", size="sm")
-                    cal_next = gr.Button("▶", size="sm")
-                upnext = gr.HTML()
 
             # ---------------- main workspace
             with gr.Column(scale=9, min_width=520, elem_classes="bv-main"):
@@ -585,7 +586,7 @@ def build_ui() -> gr.Blocks:
                     v_msg = gr.Markdown()
 
                 # 3 My tasks
-                with gr.Column(visible=False) as v_tasks:
+                with gr.Column(visible=True) as v_tasks:
                     gr.Markdown("### All tasks\nManage confirmed assignments, subjects, deadlines, and study estimates. Use the Remove checkbox to remove a task; adjust priority and dependencies when needed.")
                     t_df = gr.Dataframe(value=tasks_df, headers=TASK_HEADERS, interactive=True, wrap=True, show_search=False,
                                         column_widths=[55, 70, 220, 140, 112, 90, 92, 82, 112, 100, 82],
@@ -596,6 +597,15 @@ def build_ui() -> gr.Blocks:
                 # 4 Plan
                 with gr.Column(visible=False) as v_plan:
                     gr.Markdown("### Plan")
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            calendar_p = gr.HTML()
+                            with gr.Row(elem_classes="bv-calnav"):
+                                cal_prev = gr.Button("◀", size="sm")
+                                cal_today = gr.Button("Today", size="sm")
+                                cal_next = gr.Button("▶", size="sm")
+                        with gr.Column(scale=1):
+                            upnext = gr.HTML()
                     with gr.Row():
                         plan_btn = gr.Button("Generate / refresh plan", variant="primary")
                         use_ai = gr.Checkbox(label="Explain in friendlier words with local AI (optional)", value=False)
