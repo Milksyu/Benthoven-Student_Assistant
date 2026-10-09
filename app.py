@@ -641,7 +641,7 @@ def build_ui() -> gr.Blocks:
                         override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
                     gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
                     comm_df = gr.Dataframe(value=commitments_df, headers=["date (YYYY-MM-DD)", "start (HH:MM)", "end (HH:MM)", "label"],
-                                           interactive=True, row_count=(3, "dynamic"), show_search=False)
+                                           interactive=True, row_count=3, row_limits=None, show_search=False)
                     st_btn = gr.Button("Save settings", variant="primary")
                     st_msg = gr.Markdown()
 
