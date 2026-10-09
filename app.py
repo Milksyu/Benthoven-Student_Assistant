@@ -123,7 +123,7 @@ def tasks_df() -> pd.DataFrame:
     rows = [[t["id"], False, t["task_name"], t["subject"], t["due_date"], t["estimated_minutes"], t["minutes_done"],
              t["importance"], t["priority_override"], t["depends_on"] or 0, t["status"]]
             for t in db.list_tasks(confirmed=True)]
-    return pd.DataFrame(rows, columns=TASK_COLS)
+    return pd.DataFrame(rows, columns=TASK_HEADERS)
 
 
 def timetable_df() -> pd.DataFrame:
