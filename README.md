@@ -63,7 +63,7 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 ### Recommended setup
 
 - **Operating system:** Windows 10/11 (the setup guide in this README is for Windows).
-- **Python:** Python **3.11 or 3.12** is recommended for a straightforward setup. Use a 64-bit installation.
+- **Python:** Python **3.11 or 3.14** are tested in CI. Use a 64-bit installation.
 - **Memory:** 4 GB RAM is a practical baseline for the app without local AI. More memory is recommended if you also run a local language model.
 - **Storage:** Allow at least 1 GB for the project, Python packages, and sample data. Optional AI models can require several additional gigabytes.
 - **Browser:** A recent version of Chrome, Edge, Firefox, or Safari.
@@ -75,7 +75,7 @@ You do **not** need a GPU, Docker, a database server, or a paid API key. Ollama 
 
 | Software | Required? | Why it is needed | Official / trusted source |
 |---|---|---|---|
-| Python 3.11 or 3.12 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
+| Python 3.11 or 3.14 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
 | Git | Only if cloning the repository | Downloads and updates the source code | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | RapidOCR + ONNX Runtime | Installed from `requirements.txt` | Reads text from screenshots/photos locally using Python packages | [RapidOCR documentation](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/) |
 | Ollama | **Yes** | Runs the required Llama model locally; no hosted AI API is used | [ollama.com/download](https://ollama.com/download) |
@@ -115,18 +115,18 @@ Run:
 py --version
 ```
 
-The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
+The result should show Python 3.11.x or 3.14.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
 
 ### 3. Create a virtual environment
 
 Run these commands from the project folder:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-If you installed Python 3.12 instead, use `py -3.12 -m venv .venv` in the first command.
+If you installed Python 3.11 instead, use `py -3.11 -m venv .venv` in the first command.
 
 If PowerShell blocks the activation script, you can activate it for the current terminal session with:
 
@@ -369,7 +369,7 @@ Benthoven-StudentAssistant-main/
 ├── benthoven/
 │   ├── ocr.py              # Local image OCR through RapidOCR + ONNX Runtime
 │   ├── dates.py            # Date/time parsing and ambiguity handling
-│   ├── extractor.py        # Rule-based and optional Ollama extraction
+│   ├── extractor.py        # Local Ollama extraction and output validation
 │   ├── scheduler.py        # Task ranking, session planning, plan differences
 │   ├── storage.py          # SQLite persistence and preferences
 │   ├── narrator.py         # Optional local-AI summary rewriting
