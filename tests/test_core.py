@@ -191,6 +191,33 @@ def test_panels_render():
     assert "bv-donut" in tracker_html(NOW, [t], sessions)
 
 
+def test_image_ocr_uses_local_rapidocr(tmp_path, monkeypatch):
+    """Images use the in-process OCR engine and return human-readable confidence."""
+    from types import SimpleNamespace
+    from PIL import Image
+    from benthoven import ocr
+
+    image_path = tmp_path / "announcement.png"
+    Image.new("RGB", (320, 180), color="white").save(image_path)
+
+    class FakeEngine:
+        def __call__(self, image):
+            assert image.ndim == 3
+            assert image.shape[2] == 3
+            return SimpleNamespace(
+                txts=("Physics quiz on Friday", "Due October 16"),
+                scores=(0.9, 0.7),
+            )
+
+    monkeypatch.setattr(ocr, "ocr_available", lambda: True)
+    monkeypatch.setattr(ocr, "_get_ocr_engine", lambda: FakeEngine())
+
+    text, confidence = ocr.read_document(str(image_path))
+
+    assert text == "Physics quiz on Friday\\nDue October 16"
+    assert confidence == 80.0
+
+
 def test_build_ui_constructs_dashboard():
     """Keep the refreshed Gradio layout covered by a lightweight construction test."""
     import app as app_module
