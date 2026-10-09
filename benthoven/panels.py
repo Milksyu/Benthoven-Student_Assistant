@@ -46,7 +46,7 @@ def header_html(now: datetime, tasks: list[dict], sessions: list[dict], pending:
     load = _chip(f"📚 Today: {len(today)} session{'s' if len(today) != 1 else ''}, {mins // 60}h {mins % 60:02d}m", "")
     verify = _chip(f"📝 {pending} to verify", "warn") if pending else ""
     chips = [
-        _chip("OCR ✅" if status["ocr"] else "OCR ⚠️ not installed", "good" if status["ocr"] else "warn"),
+        _chip("Local OCR ✅" if status["ocr"] else "Local OCR ⚠️ install requirements", "good" if status["ocr"] else "warn"),
         _chip("Local AI ✅" if status["ai"] else "Local AI ⚠️ unavailable", "good" if status["ai"] else "warn"),
         _chip("✈️ Offline" if not status["net"] else "🌐 Online (not needed)", "good" if not status["net"] else ""),
     ]
