@@ -142,7 +142,6 @@ def test_ics_escapes_newlines_and_subject_fields():
         id=2, task_name="Math\r\nBEGIN:VEVENT", subject="Science, Lab;\rInjected:yes",
         goal="Read\\notes\r\nEND:VEVENT", start="2026-10-09T16:00", minutes=45
     )])
-    assert "Math\\nBEGIN\\,VEVENT" not in ics  # commas are escaped, line breaks stay within one property
     assert "SUMMARY:Math\\nBEGIN\\,VEVENT (Science\\, Lab\\;\\nInjected:yes)" in ics
     assert "DESCRIPTION:Read\\\\notes\\nEND:VEVENT" in ics
     assert "\r\nBEGIN:VEVENT\r\n" in ics
