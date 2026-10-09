@@ -191,6 +191,15 @@ def test_panels_render():
     assert "bv-donut" in tracker_html(NOW, [t], sessions)
 
 
+def test_build_ui_constructs_dashboard():
+    """Keep the refreshed Gradio layout covered by a lightweight construction test."""
+    import app as app_module
+
+    demo = app_module.build_ui()
+    assert demo is not None
+    assert "Task Manager" in app_module.build_ui.__doc__ or "Task Manager" in app_module.CSS or "Task Manager" in app_module.NAV.get("tasks", "")
+
+
 def test_save_tasks_handles_missing_remove_column(monkeypatch):
     """Older Gradio table payloads can omit the optional Remove checkbox."""
     import pandas as pd
