@@ -1,7 +1,7 @@
 """Benthoven: offline academic planner. Run with:  python app.py
 
 Local-first: binds to 127.0.0.1 only, stores data in ./data/benthoven.db, calls only
-localhost services (Tesseract binary, Ollama on localhost:11434).
+localhost services (local RapidOCR inference, Ollama on localhost:11434).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from benthoven.dates import parse_due_date
 from benthoven.extractor import extract_tasks, ollama_status
 from benthoven.ics import sessions_to_ics
 from benthoven.narrator import narrate
-from benthoven.ocr import read_document, tesseract_available
+from benthoven.ocr import ocr_available, read_document
 from benthoven.panels import calendar_html, header_html, tracker_html, upnext_html
 from benthoven.scheduler import diff_plans, schedule, summarize
 
@@ -31,6 +31,8 @@ VERIFY_COLS = ["id", "confirm", "delete", "task_name", "subject", "due_date", "e
                "task_type", "importance", "confidence", "needs attention"]
 TASK_COLS = ["id", "delete", "task_name", "subject", "due_date", "estimated_minutes", "minutes_done",
              "importance", "priority_override", "depends_on", "status"]
+TASK_HEADERS = ["ID", "Remove", "Task name", "Subject", "Deadline", "Est. minutes", "Minutes done",
+                "Importance", "Priority override", "Depends on ID", "Status"]
 
 
 # ------------------------------------------------------------------ helpers
@@ -60,6 +62,42 @@ def _str(x) -> str:
     return "" if x is None or (isinstance(x, float) and pd.isna(x)) else str(x).strip()
 
 
+def _row_value(row, key: str, *aliases: str, default=None):
+    """Read a DataFrame cell across internal keys and display headers.
+
+    Gradio can return display-header names (or omit an optional checkbox column
+    when a stale client submits an older table schema), so callbacks must not
+    assume every optional column is present.
+    """
+    for name in (key, *aliases):
+        try:
+            if name in row.index:
+                return row[name]
+        except (AttributeError, TypeError):
+            pass
+        try:
+            value = row.get(name, None)
+        except AttributeError:
+            value = None
+        if value is not None:
+            return value
+    return default
+
+
+def _truthy(value) -> bool:
+    """Interpret checkbox values safely, including strings from browser tables."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip().casefold() in {"1", "true", "yes", "y", "on", "checked"}
+    try:
+        if pd.isna(value):
+            return False
+    except (TypeError, ValueError):
+        pass
+    return bool(value)
+
+
 def _resolve_date(text: str, today: date):
     """Accept ISO or natural dates, but only if they are unambiguous."""
     text = _str(text)
@@ -85,7 +123,7 @@ def tasks_df() -> pd.DataFrame:
     rows = [[t["id"], False, t["task_name"], t["subject"], t["due_date"], t["estimated_minutes"], t["minutes_done"],
              t["importance"], t["priority_override"], t["depends_on"] or 0, t["status"]]
             for t in db.list_tasks(confirmed=True)]
-    return pd.DataFrame(rows, columns=TASK_COLS)
+    return pd.DataFrame(rows, columns=TASK_HEADERS)
 
 
 def timetable_df() -> pd.DataFrame:
@@ -195,19 +233,23 @@ def save_verified(df: pd.DataFrame):
         return "Nothing to save.", verify_df(), tasks_df()
     today, saved, errors = _now().date(), 0, []
     for _, r in df.iterrows():
-        tid = _int(r["id"])
-        if bool(r["delete"]):
+        tid = _int(_row_value(r, "id", "ID"))
+        # If an older Gradio browser payload lacks the Remove checkbox, treat it
+        # as unchecked rather than failing or accidentally deleting a task.
+        if _truthy(_row_value(r, "delete", "Remove", "Delete", default=False)):
             db.delete_task(tid)
             continue
-        d, err = _resolve_date(r["due_date"], today)
-        fields = dict(task_name=_str(r["task_name"]), subject=_str(r["subject"]),
-                      estimated_minutes=max(_int(r["estimated_minutes"], 60), 5), task_type=_str(r["task_type"]) or "Other",
-                      importance=min(max(_int(r["importance"], 3), 1), 5))
+        name = _str(_row_value(r, "task_name", "Task name"))
+        d, err = _resolve_date(_str(_row_value(r, "due_date", "Deadline", "Due date")), today)
+        fields = dict(task_name=name, subject=_str(_row_value(r, "subject", "Subject")),
+                      estimated_minutes=max(_int(_row_value(r, "estimated_minutes", "Est. minutes"), 60), 5),
+                      task_type=_str(_row_value(r, "task_type", "Type") or "Other"),
+                      importance=min(max(_int(_row_value(r, "importance", "Importance"), 3), 1), 5))
         if d:
             fields["due_date"] = d.isoformat()
-        if bool(r["confirm"]):
+        if _truthy(_row_value(r, "confirm", "Confirm", default=False)):
             if not d:
-                errors.append(f"{_str(r['task_name'])}: {err}")
+                errors.append(f"{name}: {err}")
                 db.update_task(tid, **fields)
                 continue
             fields["confirmed"] = 1
@@ -220,21 +262,32 @@ def save_verified(df: pd.DataFrame):
 
 
 def save_tasks(df: pd.DataFrame):
+    if df is None or df.empty:
+        return "Nothing to save.", tasks_df()
     today, errors = _now().date(), []
     for _, r in df.iterrows():
-        tid = _int(r["id"])
-        if bool(r["delete"]):
+        tid = _int(_row_value(r, "id", "ID"))
+        # A missing checkbox column means "keep this task", never delete it.
+        if _truthy(_row_value(r, "delete", "Remove", "Delete", default=False)):
             db.delete_task(tid)
             continue
-        d, err = _resolve_date(r["due_date"], today)
+        name = _str(_row_value(r, "task_name", "Task name"))
+        d, err = _resolve_date(_str(_row_value(r, "due_date", "Deadline", "Due date")), today)
         if not d:
-            errors.append(f"{_str(r['task_name'])}: {err}")
+            errors.append(f"{name}: {err}")
             continue
-        db.update_task(tid, task_name=_str(r["task_name"]), subject=_str(r["subject"]), due_date=d.isoformat(),
-                       estimated_minutes=max(_int(r["estimated_minutes"], 60), 5), minutes_done=max(_int(r["minutes_done"]), 0),
-                       importance=min(max(_int(r["importance"], 3), 1), 5),
-                       priority_override=min(max(_int(r["priority_override"]), 0), 5),
-                       depends_on=_int(r["depends_on"]) or None, status=_str(r["status"]) or "open")
+        db.update_task(
+            tid,
+            task_name=name,
+            subject=_str(_row_value(r, "subject", "Subject")),
+            due_date=d.isoformat(),
+            estimated_minutes=max(_int(_row_value(r, "estimated_minutes", "Est. minutes"), 60), 5),
+            minutes_done=max(_int(_row_value(r, "minutes_done", "Minutes done"), 0), 0),
+            importance=min(max(_int(_row_value(r, "importance", "Importance"), 3), 1), 5),
+            priority_override=min(max(_int(_row_value(r, "priority_override", "Priority override"), 0), 0), 5),
+            depends_on=_int(_row_value(r, "depends_on", "Depends on ID")) or None,
+            status=_str(_row_value(r, "status", "Status")) or "open",
+        )
     return ("Saved." if not errors else "Saved, except:\n" + "\n".join(f"- {e}" for e in errors)), tasks_df()
 
 
@@ -361,7 +414,7 @@ def privacy_status() -> str:
     return f"""
 | Component | Status |
 |---|---|
-| Tesseract OCR (local binary) | {ok(tesseract_available())} {'installed' if tesseract_available() else 'not found: images cannot be read, but pasted text still works'} |
+| Local OCR (RapidOCR + ONNX Runtime) | {ok(ocr_available())} {'installed' if ocr_available() else 'missing: install Python requirements to enable image text extraction'} |
 | Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: AI features unavailable; start Ollama'} |
 | Model `{p['ollama_model']}` | {ok(bool(ol['model_ready']))} {'ready' if ol['model_ready'] else 'not pulled yet (run: ollama pull ' + p['ollama_model'] + ')'} |
 | Scheduling engine | ✅ plain Python, fully local |
@@ -384,7 +437,7 @@ def _status() -> dict:
     if time.time() - _status_cache["t"] > 20 or _status_cache["v"] is None:
         p = db.get_prefs()
         ol = ollama_status(p["ollama_url"], p["ollama_model"])
-        _status_cache.update(t=time.time(), v={"ocr": tesseract_available(),
+        _status_cache.update(t=time.time(), v={"ocr": ocr_available(),
                                                "ai": bool(ol["running"] and ol["model_ready"]),
                                                "net": internet_reachable()})
     return _status_cache["v"]
@@ -402,43 +455,76 @@ def refresh_panels(month_offset: int = 0):
 
 
 CSS = """
-.gradio-container{max-width:1500px !important}
-.bv-header{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 18px;border-radius:14px;
-  background:linear-gradient(135deg,#3b2a6d,#5b3fa8);color:#fff}
-.bv-brand{display:flex;align-items:center;gap:10px}.bv-logo{font-size:30px}
-.bv-title{font-size:22px;font-weight:700;letter-spacing:.5px}.bv-sub{font-size:12px;opacity:.8}
-.bv-chips{display:flex;flex-wrap:wrap;gap:8px;flex:1}.bv-chips.right{justify-content:flex-end;flex:0 1 auto}
-.bv-header,.bv-header *{color:#fff !important}
-.bv-chip{background:rgba(255,255,255,.16);padding:5px 11px;border-radius:999px;font-size:12.5px;white-space:nowrap}
-.bv-chip.good{background:rgba(80,200,120,.30)}.bv-chip.warn{background:rgba(255,190,60,.38)}.bv-chip.bad{background:rgba(255,90,90,.45)}
-.bv-card{border:1px solid var(--border-color-primary,#8884);border-radius:14px;padding:14px;
-  background:var(--background-fill-secondary,#f6f6f9);color:var(--body-text-color,#222)}
-.bv-card-title{font-weight:700;margin-bottom:8px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;opacity:.75}
-.bv-big{font-size:34px;font-weight:700}.bv-big small{font-size:12px;font-weight:400;opacity:.7;margin-left:6px}
-.bv-bar{height:7px;border-radius:99px;background:var(--border-color-primary,#8884);overflow:hidden}
-.bv-bar.big{height:10px;margin:6px 0 10px}.bv-bar div{height:100%;background:linear-gradient(90deg,#7c5cff,#46c28e)}
-.bv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 12px;text-align:center}
-.bv-stats b{display:block;font-size:17px}.bv-stats span{font-size:11px;opacity:.7}.bv-stats .bad b{color:#e5484d}
-.bv-row{margin:7px 0}.bv-rowtop{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;gap:8px}
+:root{color-scheme:light!important}
+html,body{background:#f7f8f6!important;color:#303630!important}
+.gradio-container{max-width:1480px!important;padding:20px 28px 40px!important;background:#f7f8f6!important;color:#303630!important;color-scheme:light!important;
+  --body-background-fill:#f7f8f6!important;--background-fill-primary:#fff!important;--background-fill-secondary:#fff!important;
+  --block-background-fill:#fff!important;--input-background-fill:#fff!important;--body-text-color:#303630!important;
+  --block-label-text-color:#525b54!important;--border-color-primary:#e1e5e0!important;--neutral-50:#f8faf7!important}
+.gradio-container button{border-radius:5px!important;box-shadow:none!important}
+.gradio-container input,.gradio-container textarea{background:#fff!important;color:#303630!important}
+.bv-cover{height:178px;position:relative;border-radius:12px 12px 0 0;overflow:visible;
+  background:radial-gradient(circle at 88% 24%,rgba(73,132,103,.20) 0 2px,transparent 3px 100%),
+  radial-gradient(circle at 80% 32%,rgba(73,132,103,.13) 0 22px,transparent 23px 100%),
+  linear-gradient(120deg,#333532,#252724 72%,#30332f);margin-top:4px}
+.bv-cover:after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.12;
+  background-image:repeating-linear-gradient(0deg,transparent 0 5px,rgba(255,255,255,.08) 6px,transparent 7px)}
+.bv-cover-mark{position:absolute;left:6.4%;bottom:-18px;display:grid;grid-template-columns:18px 18px;grid-template-rows:18px 18px;gap:3px;z-index:1}
+.bv-cover-mark i{display:block;background:#4a896b}.bv-cover-mark i:nth-child(2),.bv-cover-mark i:nth-child(3){background:#579877}
+.bv-page-title{font-size:29px;line-height:1.2;font-weight:750;color:#303630;background:#fff;
+  padding:28px 30px 16px;border-left:1px solid #e2e6e1;border-right:1px solid #e2e6e1}
+.bv-header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 30px 18px;
+  background:#fff;color:#3e4c43;border-left:1px solid #e2e6e1;border-right:1px solid #e2e6e1;border-bottom:1px solid #e2e6e1;
+  border-radius:0 0 10px 10px;margin-bottom:16px}
+.bv-brand{display:flex;align-items:center;gap:9px}.bv-logo{font-size:24px}
+.bv-title{font-size:17px;font-weight:700;letter-spacing:.2px;color:#32483b}.bv-sub{font-size:11.5px;color:#777f78}
+.bv-chips{display:flex;flex-wrap:wrap;gap:7px;flex:1}.bv-chips.right{justify-content:flex-end;flex:0 1 auto}
+.bv-chip{background:#f0f2ef;color:#4c554f;padding:5px 9px;border-radius:999px;font-size:11.5px;white-space:nowrap}
+.bv-chip.good{background:#e5f3eb;color:#326f51}.bv-chip.warn{background:#fff2d5;color:#815b15}.bv-chip.bad{background:#fde8e7;color:#a53f3b}
+.bv-layout{align-items:flex-start!important;gap:18px}
+.bv-sidebar{gap:14px!important;min-width:0}
+.bv-card{border:1px solid #e1e5e0;border-radius:5px;padding:14px;background:#fff;color:#343a35;box-shadow:0 1px 2px rgba(33,44,36,.025)}
+.bv-card-title{font-weight:650;margin-bottom:10px;font-size:12px;letter-spacing:.15px;text-transform:none;color:#5d655f}
+.bv-donut-wrap{display:flex;align-items:center;justify-content:center;padding:10px 0 8px}
+.bv-donut{width:108px;height:108px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.bv-donut:before{content:"";position:absolute;inset:8px;border-radius:50%;background:#fff}
+.bv-donut-center{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.bv-donut-center strong{font-size:25px;font-weight:650;color:#303630}.bv-donut-center span{font-size:10px;color:#858b86;margin-top:4px}
+.bv-chart-legend{display:flex;flex-direction:column;gap:5px;align-items:flex-start;width:max-content;max-width:100%;margin:5px auto 12px;font-size:10.5px;color:#7a807b}
+.bv-chart-legend span{display:flex;align-items:center;gap:7px}
+.bv-legend-dot{width:6px;height:6px;border-radius:2px;display:inline-block;flex:none}
+.bv-big{font-size:27px;font-weight:700;color:#303630}.bv-big small{font-size:11px;font-weight:400;color:#7c837d;margin-left:5px}
+.bv-bar{height:6px;border-radius:99px;background:#e7e9e6;overflow:hidden}
+.bv-bar.big{height:7px;margin:5px 0 10px}.bv-bar div{height:100%;background:linear-gradient(90deg,#5da983,#80c09d)}
+.bv-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:8px 0 12px;text-align:center}
+.bv-stats b{display:block;font-size:15px;color:#3d4940}.bv-stats span{font-size:10px;color:#828982}
+.bv-stats .bad b{color:#c54542}
+.bv-row{margin:7px 0}.bv-rowtop{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;gap:8px}
 .bv-cal{width:100%;border-collapse:collapse;text-align:center;table-layout:fixed}
-.bv-cal,.bv-cal th,.bv-cal td{border:none !important}
-.bv-cal th{font-size:11px;opacity:.6;padding:3px 0}.bv-cal td{height:38px;font-size:12.5px;vertical-align:top;padding-top:3px;border-radius:8px}
-.bv-cal td.other{opacity:.35}.bv-cal td.today span{background:#5b3fa8;color:#fff;border-radius:99px;padding:1px 6px}
+.bv-cal,.bv-cal th,.bv-cal td{border:none!important}
+.bv-cal th{font-size:10px;color:#8b918b;padding:3px 0}.bv-cal td{height:30px;font-size:11.5px;vertical-align:top;padding-top:3px;border-radius:5px;color:#4b534d}
+.bv-cal td.other{opacity:.35}.bv-cal td.today span{background:#4d896a;color:#fff;border-radius:99px;padding:2px 6px}
 .bv-cal td div{display:flex;justify-content:center;gap:3px;margin-top:2px;min-height:7px}
-.bv-cal i,.bv-legend i{display:inline-block;width:7px;height:7px;border-radius:99px}
-i.due{background:#e5484d}i.study{background:#4c8dff}.bv-legend{font-size:11.5px;opacity:.75;margin-top:6px}
-.bv-next{padding:10px;border-radius:10px;background:rgba(91,63,168,.14);margin-bottom:8px}
-.bv-next-time{font-size:12px;opacity:.75}.bv-next-task{font-weight:700;font-size:16px;margin:2px 0}
-.bv-next-task small{font-weight:400;opacity:.7}.bv-next-goal{font-size:12.5px;opacity:.85}
-.bv-mini{font-size:12.5px;padding:4px 0}.bv-sep{margin:10px 0 4px;font-size:11px;text-transform:uppercase;opacity:.6;letter-spacing:.6px}
-.bv-dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:#46c28e;margin-right:6px}
-.bv-dot.warn{background:#f5a524}.bv-dot.bad{background:#e5484d}.bv-muted{opacity:.65}.bv-empty{font-size:13px;opacity:.7;padding:6px 0}
-.bv-actions-title{font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.6px;opacity:.75;margin:2px 0 6px}
-.bv-main{border:1px solid var(--border-color-primary,#8884);border-radius:14px;padding:16px;min-height:640px}
-.bv-calnav{flex-wrap:nowrap !important;gap:6px}.bv-calnav button{min-width:0 !important}
-.bv-nav button{justify-content:flex-start !important;text-align:left}
+.bv-cal i,.bv-legend i{display:inline-block;width:6px;height:6px;border-radius:99px}
+i.due{background:#db6d66}i.study{background:#3b9bd6}.bv-legend{font-size:10px;color:#7b827c;margin-top:6px;display:flex;gap:5px;align-items:center}
+.bv-next{padding:10px;border-radius:6px;background:#f2f6f2;margin-bottom:8px}
+.bv-next-time{font-size:11px;color:#6d776f}.bv-next-task{font-weight:650;font-size:13px;margin:3px 0;color:#3f5144}
+.bv-next-task small{font-weight:400;color:#778079}.bv-next-goal{font-size:11.5px;color:#6e776f}
+.bv-mini{font-size:11.5px;padding:4px 0;color:#4e5d52}.bv-sep{margin:10px 0 4px;font-size:10px;text-transform:uppercase;color:#858c86;letter-spacing:.5px}
+.bv-dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:#56a87c;margin-right:6px}
+.bv-dot.warn{background:#dda94d}.bv-dot.bad{background:#d86660}.bv-muted{color:#818981}.bv-empty{font-size:12px;color:#818981;padding:6px 0}
+.bv-actions-title{font-weight:650;font-size:12px;letter-spacing:.2px;color:#677169;margin:2px 0 6px}
+.bv-main{border:1px solid #e1e5e0;border-radius:5px;padding:0 16px 18px;min-height:640px;background:#fff;box-shadow:0 1px 2px rgba(33,44,36,.025)}
+.bv-topnav{display:flex;flex-wrap:wrap;gap:5px;padding:12px 0 8px;border-bottom:1px solid #e8ebe7;margin-bottom:12px}
+.bv-topnav button{min-width:0!important;font-size:11.5px!important;padding:7px 10px!important;border-radius:5px!important;box-shadow:none!important}
+.bv-quickbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin:0 0 12px}
+.bv-quickbar button{font-size:11.5px!important;border-radius:6px!important;min-width:0!important}
+.bv-main h3{font-weight:650;color:#343c36}
+.bv-main .wrap{border-color:#e2e6e1!important}
+.bv-main .dataframe{font-size:12px}
+.bv-calnav{flex-wrap:nowrap!important;gap:6px}.bv-calnav button{min-width:0!important;border-radius:5px!important}
+@media(max-width:900px){.gradio-container{padding:12px!important}.bv-page-title{padding:22px 18px 12px}.bv-header{padding:8px 18px 14px}.bv-layout{gap:12px}.bv-main{padding:0 10px 14px}}
 """
-
 VIEWS = ["capture", "verify", "tasks", "plan", "progress", "settings", "privacy"]
 NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My tasks", "plan": "🗓️ Plan",
        "progress": "📈 Progress", "settings": "⚙️ Settings", "privacy": "🔒 Privacy"}
@@ -448,23 +534,27 @@ NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My task
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Benthoven") as demo:
         cal_offset = gr.State(0)
+        gr.HTML('<div class="bv-cover" aria-hidden="true"><div class="bv-cover-mark"><i></i><i></i><i></i><i></i></div></div>')
+        gr.HTML('<div class="bv-page-title">Task Manager</div>')
         header = gr.HTML()
 
-        with gr.Row(equal_height=False):
-            # ---------------- left column: tracker + actions
-            with gr.Column(scale=3, min_width=240):
+        with gr.Row(equal_height=False, elem_classes="bv-layout"):
+            # ---------------- left column: chart + calendar
+            with gr.Column(scale=3, min_width=225, elem_classes="bv-sidebar"):
                 tracker = gr.HTML()
-                with gr.Group(elem_classes="bv-nav"):
-                    gr.HTML('<div class="bv-actions-title" style="padding:10px 12px 0">Actions</div>')
-                    nav_btns = {v: gr.Button(NAV[v], variant="primary" if v == "capture" else "secondary") for v in VIEWS}
-                    gr.HTML('<div class="bv-actions-title" style="padding:10px 12px 0">Quick actions</div>')
-                    replan_btn = gr.Button("⚡ Replan now")
-                    ics_quick = gr.Button("📅 Export .ics")
 
-            # ---------------- centre: main window
-            with gr.Column(scale=8, min_width=480, elem_classes="bv-main"):
+            # ---------------- main workspace
+            with gr.Column(scale=9, min_width=520, elem_classes="bv-main"):
+                with gr.Row(elem_classes="bv-topnav"):
+                    nav_btns = {
+                        v: gr.Button(NAV[v], variant="primary" if v == "tasks" else "secondary", size="sm")
+                        for v in VIEWS
+                    }
+                with gr.Row(elem_classes="bv-quickbar"):
+                    replan_btn = gr.Button("⚡ Replan now", size="sm")
+                    ics_quick = gr.Button("📅 Export .ics", size="sm")
                 # 1 Capture
-                with gr.Column(visible=True) as v_capture:
+                with gr.Column(visible=False) as v_capture:
                     gr.Markdown("### Capture\nAdd assignment photos, screenshots, text files, or paste an announcement.")
                     files = gr.File(label="Assignment photos, screenshots, or .txt/.md files", file_count="multiple",
                                     file_types=[".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".txt", ".md"])
@@ -496,10 +586,10 @@ def build_ui() -> gr.Blocks:
                     v_msg = gr.Markdown()
 
                 # 3 My tasks
-                with gr.Column(visible=False) as v_tasks:
-                    gr.Markdown("### My tasks\nConfirmed tasks. Set **priority_override** (1-5) to override the engine, or **depends_on** (a task id) to order work.")
-                    t_df = gr.Dataframe(value=tasks_df, headers=TASK_COLS, interactive=True, wrap=True, show_search=False,
-                                        column_widths=[50, 80, 220, 150, 110, 90, 90, 90, 110, 100, 80],
+                with gr.Column(visible=True) as v_tasks:
+                    gr.Markdown("### All tasks\nManage confirmed assignments, subjects, deadlines, and study estimates. Use the Remove checkbox to remove a task; adjust priority and dependencies when needed.")
+                    t_df = gr.Dataframe(value=tasks_df, headers=TASK_HEADERS, interactive=True, wrap=True, show_search=False,
+                                        column_widths=[55, 70, 220, 140, 112, 90, 92, 82, 112, 100, 82],
                                         datatype=["number", "bool", "str", "str", "str", "number", "number", "number", "number", "number", "str"])
                     t_btn = gr.Button("Save task changes")
                     t_msg = gr.Markdown()
@@ -507,6 +597,15 @@ def build_ui() -> gr.Blocks:
                 # 4 Plan
                 with gr.Column(visible=False) as v_plan:
                     gr.Markdown("### Plan")
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            calendar_p = gr.HTML()
+                            with gr.Row(elem_classes="bv-calnav"):
+                                cal_prev = gr.Button("◀", size="sm")
+                                cal_today = gr.Button("Today", size="sm")
+                                cal_next = gr.Button("▶", size="sm")
+                        with gr.Column(scale=1):
+                            upnext = gr.HTML()
                     with gr.Row():
                         plan_btn = gr.Button("Generate / refresh plan", variant="primary")
                         use_ai = gr.Checkbox(label="Explain in friendlier words with local AI (optional)", value=False)
@@ -552,7 +651,7 @@ def build_ui() -> gr.Blocks:
                         override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
                     gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
                     comm_df = gr.Dataframe(value=commitments_df, headers=["date (YYYY-MM-DD)", "start (HH:MM)", "end (HH:MM)", "label"],
-                                           interactive=True, row_count=(3, "dynamic"), show_search=False)
+                                           interactive=True, row_count=3, row_limits=None, show_search=False)
                     st_btn = gr.Button("Save settings", variant="primary")
                     st_msg = gr.Markdown()
 
@@ -562,14 +661,6 @@ def build_ui() -> gr.Blocks:
                     p_md = gr.Markdown(privacy_status)
                     p_btn = gr.Button("Refresh status")
 
-            # ---------------- right column: calendar + up next
-            with gr.Column(scale=4, min_width=280):
-                calendar_p = gr.HTML()
-                with gr.Row(elem_classes="bv-calnav"):
-                    cal_prev = gr.Button("◀", size="sm")
-                    cal_today = gr.Button("Today", size="sm")
-                    cal_next = gr.Button("▶", size="sm")
-                upnext = gr.HTML()
 
         # ------------------------------------------------------------ wiring
         views = [v_capture, v_verify, v_tasks, v_plan, v_progress, v_settings, v_privacy]
@@ -638,5 +729,10 @@ def check_local_ai_or_exit() -> None:
 
 if __name__ == "__main__":
     check_local_ai_or_exit()
-    build_ui().launch(server_name="127.0.0.1", server_port=int(os.environ.get("PORT", 7860)),
-                      inbrowser=False, css=CSS)
+    build_ui().launch(
+        server_name="127.0.0.1",
+        server_port=int(os.environ.get("PORT", 7860)),
+        inbrowser=False,
+        css=CSS,
+        theme=gr.themes.Soft(primary_hue="green", secondary_hue="green", neutral_hue="stone"),
+    )

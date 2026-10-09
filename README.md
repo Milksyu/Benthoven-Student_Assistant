@@ -15,8 +15,6 @@
 - [System requirements](#system-requirements)
 - [What you need to install](#what-you-need-to-install)
 - [Installation on Windows](#installation-on-windows)
-- [Installation on macos](#installation-on-macos)
-- [Installation on Linux](#installation-on-linux)
 - [Start the app](#start-the-app)
 - [First-time walkthrough](#first-time-walkthrough)
 - [Required local AI with Ollama](#required-local-ai-with-ollama)
@@ -48,7 +46,7 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 | Capability | Current behavior |
 |---|---|
 | Assignment input | Text files, Markdown files, supported image formats, pasted text, and manual task entry |
-| Image-to-text | Local Tesseract OCR, when installed |
+| Image-to-text | Local RapidOCR inference through Python; no separate OCR executable or PATH setup |
 | Task extraction | Required local Llama model through Ollama; output is validated before review |
 | Deadline handling | Date parsing with ambiguity flags for review |
 | Task review | Confirm, edit, and remove extracted tasks in the dashboard |
@@ -64,26 +62,26 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 
 ### Recommended setup
 
-- **Operating system:** Windows 11 is the easiest starting point for many users. macOS and mainstream Linux distributions are also supported by the Python app and its dependencies.
-- **Python:** Python **3.11 or 3.12** is recommended for a straightforward setup. Use a 64-bit installation.
+- **Operating system:** Windows 10/11 (the setup guide in this README is for Windows).
+- **Python:** Python **3.11 or 3.14** are tested in CI. Use a 64-bit installation.
 - **Memory:** 4 GB RAM is a practical baseline for the app without local AI. More memory is recommended if you also run a local language model.
 - **Storage:** Allow at least 1 GB for the project, Python packages, and sample data. Optional AI models can require several additional gigabytes.
 - **Browser:** A recent version of Chrome, Edge, Firefox, or Safari.
 - **Internet:** Required for the initial downloads. The core app can run locally after installation; see [Privacy and offline behavior](#privacy-and-offline-behavior).
 
-You do **not** need a GPU, Docker, a database server, or a paid API key to use the basic app.
+You do **not** need a GPU, Docker, a database server, or a paid API key. Ollama and a local model are required.
 
 ## What you need to install
 
 | Software | Required? | Why it is needed | Official / trusted source |
 |---|---|---|---|
-| Python 3.11 or 3.12 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
+| Python 3.11 or 3.14 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
 | Git | Only if cloning the repository | Downloads and updates the source code | [git-scm.com/downloads](https://git-scm.com/downloads) |
-| Tesseract OCR | Only for image uploads | Converts text in screenshots/photos into text | [Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html) |
+| RapidOCR + ONNX Runtime | Installed from `requirements.txt` | Reads text from screenshots/photos locally using Python packages | [RapidOCR documentation](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/) |
 | Ollama | **Yes** | Runs the required Llama model locally; no hosted AI API is used | [ollama.com/download](https://ollama.com/download) |
 | A modern web browser | Yes | Displays the local dashboard | Use your existing browser |
 
-**Required install:** Python, the project dependencies, Ollama, and the configured local Llama model. Benthoven checks that Ollama and the model are available before starting. Tesseract is additionally required for image OCR; text pasted into the app does not require OCR.
+**Required install:** Python, the project dependencies, Ollama, and the configured local Llama model. Benthoven checks that Ollama and the model are available before starting. Local image OCR is included with the Python dependencies; no separate OCR executable or PATH setup is needed.
 
 ---
 
@@ -117,7 +115,7 @@ Run:
 py --version
 ```
 
-The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
+The result should show Python 3.11.x or 3.14.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
 
 ### 3. Create a virtual environment
 
@@ -137,19 +135,23 @@ python -m pip install -r requirements.txt
 
 Wait for pip to finish. If installation fails, read the first error message and check that the correct Python version is active.
 
-### 5. Install Tesseract OCR (for screenshots and photos)
+### 5. Image OCR is included with the Python dependencies
 
-1. Open the [Tesseract Windows installation page](https://github.com/UB-Mannheim/tesseract/wiki).
-2. Download and run the current 64-bit installer.
-3. Keep English language data selected if your announcements are in English.
-4. If the installer does not add Tesseract to PATH, add its installation directory—commonly `C:\Program Files\Tesseract-OCR`—to your Windows PATH.
-5. Close and reopen PowerShell, then verify the installation:
+Benthoven uses RapidOCR with the ONNX Runtime CPU engine to read text from images locally. There is no separate OCR installer, command-line program, or Windows PATH configuration to do. The RapidOCR package includes its recognition models.
+
+If you have already created the virtual environment, install or refresh the dependencies with:
 
 ```powershell
-tesseract --version
+python -m pip install -r requirements.txt
 ```
 
-If you only plan to paste text or use `.txt` / `.md` files, you can skip Tesseract for now.
+To verify the OCR package imports:
+
+```powershell
+python -c "from rapidocr import RapidOCR; import onnxruntime; print('Local OCR ready')"
+```
+
+The first OCR operation may take longer while the model initializes. OCR can still misread small, blurry, or skewed text, so always inspect detected deadlines before confirming tasks.
 
 ### 6. Install Ollama and the required Llama model
 
@@ -177,162 +179,22 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Keep the Po
 
 ---
 
-## Installation on macOS
-
-These instructions use Terminal and assume Python 3.11 or 3.12 is installed. You can download Python from [python.org](https://www.python.org/downloads/macos/) or use a package manager you already have.
-
-### 1. Open the project folder
-
-Extract the ZIP in Finder, then open Terminal and change to the extracted folder. For example, if it is in Downloads:
-
-```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
-```
-
-Adjust the path if you extracted it somewhere else.
-
-### 2. Create and activate a virtual environment
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-```
-
-If you use Python 3.12, replace `python3.11` with `python3.12`.
-
-### 3. Install dependencies
-
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 4. Install Tesseract (optional, but required for image OCR)
-
-If Homebrew is installed:
-
-```bash
-brew install tesseract
-```
-
-Check that it works:
-
-```bash
-tesseract --version
-```
-
-If you do not use Homebrew, follow the [official Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html).
-
-### 5. Install Ollama and the required Llama model
-
-Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
-
-```bash
-ollama pull llama3.2:3b
-ollama list
-```
-
-Make sure the Ollama service is running before starting Benthoven.
-
-### 6. Run the app
-
-```bash
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860). Keep Terminal open while the app is running. Press **Ctrl+C** in Terminal to stop it.
-
----
-
-## Installation on Linux
-
-The commands below are for Ubuntu or Debian-based distributions. Other distributions may use different package-manager commands.
-
-### 1. Install Python and system packages
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
-```
-
-Check your Python version:
-
-```bash
-python3 --version
-```
-
-Python 3.11 or 3.12 is recommended. If your distribution's default Python is older, install a supported version using the method recommended for that distribution.
-
-### 2. Open the project folder
-
-Extract the ZIP, then change to the extracted folder. For example:
-
-```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
-```
-
-### 3. Create the environment and install dependencies
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 4. Install Tesseract (optional, but required for image OCR)
-
-```bash
-sudo apt install -y tesseract-ocr
-tesseract --version
-```
-
-### 5. Install Ollama and the required Llama model
-
-Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
-
-```bash
-ollama pull llama3.2:3b
-ollama list
-```
-
-Make sure the Ollama service is running before starting Benthoven.
-
-### 6. Run the app
-
-```bash
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Press **Ctrl+C** in the terminal to stop the app.
-
----
-
 ## Start the app
 
 Before launching, ensure Ollama is running and `llama3.2:3b` appears in `ollama list`. The application exits with setup instructions if the required local service or model is missing.
 
 Every time you want to use Benthoven again:
 
-1. Open PowerShell (Windows) or Terminal (macOS/Linux).
+1. Open PowerShell.
 2. Change directory to the project folder.
-3. Activate the virtual environment.
+3. Activate the virtual environment:
+
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+
 4. Run `python app.py`.
 5. Visit `http://127.0.0.1:7860` in your browser.
-
-Activation commands:
-
-**Windows PowerShell**
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux**
-
-```bash
-source .venv/bin/activate
-```
 
 If you see a message that the address or port is already in use, stop the other running Benthoven process first. The app reads the `PORT` environment variable if you need to choose a different port.
 
@@ -383,7 +245,7 @@ Ollama and the configured Llama model are required for Benthoven. The app does n
 4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`. If you change the model in Settings, pull that exact model first and restart Benthoven.
 5. Test with a sample announcement and verify every suggested deadline before confirming it.
 
-The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; the app's fallback does not remove the need to verify results.
+The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; always verify extracted tasks and deadlines before confirming them.
 
 ---
 
@@ -411,13 +273,13 @@ Benthoven is designed to run locally:
 
 - The dashboard binds to `127.0.0.1` by default, so it is intended for access from the same computer.
 - Tasks, preferences, sessions, and captured text are stored in a local SQLite database. By default, the database is `data/benthoven.db` in the project directory.
-- Tesseract OCR runs on the computer.
-- The rule-based extraction path does not require a hosted AI service.
+- RapidOCR performs image-text recognition locally through Python and ONNX Runtime.
+- Task extraction uses the required local Ollama model; no hosted AI API is used.
 - Ollama sends model requests to the local Ollama service rather than a hosted model API. Ollama and its configured model are required for startup.
 
 **Important:** “Local-first” does not automatically mean every operation is offline. You need internet to install dependencies and download models. The app also checks internet reachability for its privacy/status display. Do not upload sensitive school, personal, or other confidential information unless you understand and accept how your local computer and files are managed.
 
-To run Benthoven offline, first install all software and download the configured Ollama model while connected to the internet. Then ensure Ollama is running and launch Benthoven; after setup, the AI requests stay on the local machine. Image capture additionally requires a working Tesseract installation.
+To run Benthoven offline, install the Python packages and download the configured Ollama model while connected to the internet. Then ensure Ollama is running and launch Benthoven; OCR and AI inference run locally after setup. Image capture uses RapidOCR and ONNX Runtime, installed through `requirements.txt`.
 
 ### Back up or reset local data
 
@@ -435,8 +297,8 @@ If you set the `BENTHOVEN_DB` environment variable, the database is stored at th
 |---|---|---|
 | `.txt` | Yes | Read as UTF-8 text |
 | `.md` | Yes | Read as UTF-8 text |
-| `.png`, `.jpg`, `.jpeg` | Yes | OCR requires Tesseract |
-| `.bmp`, `.tif`, `.tiff`, `.webp` | Yes | OCR requires Tesseract |
+| `.png`, `.jpg`, `.jpeg` | Yes | OCR uses local RapidOCR + ONNX Runtime |
+| `.bmp`, `.tif`, `.tiff`, `.webp` | Yes | OCR uses local RapidOCR + ONNX Runtime |
 | `.pdf` | Not currently | Copy/paste the text or convert the relevant page to an image first |
 | `.docx`, `.pptx`, `.heic` | Not currently | Export or copy the announcement into a supported format |
 
@@ -462,9 +324,9 @@ python -m pip install -r requirements.txt
 
 Run the temporary, current-terminal workaround in the Windows installation section, or use `.venv\Scripts\python.exe` directly without activating the environment.
 
-### Image upload says Tesseract is not installed
+### Image upload says local OCR is unavailable
 
-Run `tesseract --version`. If the command is not found, install Tesseract and add its installation folder to PATH. Restart the terminal and launch Benthoven again. You can still paste text or use `.txt` / `.md` files without OCR.
+Activate the virtual environment and run `python -m pip install -r requirements.txt`. Then verify that RapidOCR and ONNX Runtime import successfully with `python -c "from rapidocr import RapidOCR; import onnxruntime; print('Local OCR ready')"`. Restart Benthoven after installing. You can still paste text or use `.txt` / `.md` files without OCR.
 
 ### Ollama or the required model is unavailable
 
@@ -494,9 +356,9 @@ Benthoven-StudentAssistant-main/
 ├── app.py                  # Gradio dashboard and app entry point
 ├── requirements.txt        # Python dependencies
 ├── benthoven/
-│   ├── ocr.py              # Local image OCR through Tesseract
+│   ├── ocr.py              # Local image OCR through RapidOCR + ONNX Runtime
 │   ├── dates.py            # Date/time parsing and ambiguity handling
-│   ├── extractor.py        # Rule-based and optional Ollama extraction
+│   ├── extractor.py        # Local Ollama extraction and output validation
 │   ├── scheduler.py        # Task ranking, session planning, plan differences
 │   ├── storage.py          # SQLite persistence and preferences
 │   ├── narrator.py         # Optional local-AI summary rewriting
@@ -513,16 +375,16 @@ Benthoven-StudentAssistant-main/
 ## Known limitations
 
 - Extracted task names, subjects, dates, and time estimates may be wrong; user review is essential.
-- OCR quality depends on image clarity and the language data installed with Tesseract.
+- OCR quality depends on image clarity, text size, and image orientation; OCR results should always be reviewed.
 - PDF and office-document parsing are not implemented in the current MVP.
-- Local AI performance varies by device and model; the rule-based fallback is less flexible with unusual wording.
+- Local AI performance varies by device and model. Benthoven does not silently fall back to rule-based extraction when Ollama is unavailable.
 - Scheduling results depend on the accuracy of task estimates, availability, commitments, and deadlines entered by the student.
 - Calendar export creates an `.ics` file; it does not automatically sync changes with an external calendar.
 - This is a local app, not a hosted multi-user service. Avoid exposing it to a public network without adding appropriate authentication and security controls.
 
 ## Development notes
 
-- Keep the core workflow usable without Ollama.
+- Keep Ollama and the configured local model as required dependencies; never silently fall back to rule-based extraction or a cloud API.
 - Treat extracted values as untrusted until the student verifies them.
 - Prefer deterministic scheduling behavior that can be tested.
 - Run `python -m pytest tests -q` after changes to extraction, dates, scheduling, or storage.

@@ -1,6 +1,7 @@
 gradio>=6,<7
 pandas>=2.0
-pytesseract>=0.3.10
 Pillow>=10
 requests>=2.31
 pytest>=8
+rapidocr>=3.10,<4
+onnxruntime>=1.30,<2
