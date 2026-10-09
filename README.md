@@ -394,7 +394,7 @@ Ollama and the configured Llama model are required for Benthoven. The app does n
 4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`. If you change the model in Settings, pull that exact model first and restart Benthoven.
 5. Test with a sample announcement and verify every suggested deadline before confirming it.
 
-The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; the app's fallback does not remove the need to verify results.
+The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; always verify extracted tasks and deadlines before confirming them.
 
 ---
 
