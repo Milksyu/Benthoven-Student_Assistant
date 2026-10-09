@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -51,7 +51,7 @@ else:
     line(False, "Local AI inference skipped because Ollama or the configured model is unavailable")
     print("      -> Install/start Ollama and pull the configured model. Benthoven requires local AI and does not silently fall back to rules or a cloud API.")
 
-today = date(2026, 10, 9)
+today = date.today()
 tasks_found = []
 for f in sorted((ROOT / "sample_docs").glob("*.txt")):
     tasks, engine = extract_tasks(f.read_text(encoding="utf-8"), today, prefs["engine"], prefs["ollama_model"], prefs["ollama_url"])
@@ -64,7 +64,7 @@ if tasks_found:
     rows = [dict(id=i + 1, task_name=t["task_name"], subject=t["subject"], due_date=t["due_date"], due_time="23:59",
                  estimated_minutes=t["estimated_minutes"], minutes_done=0, importance=t["importance"],
                  priority_override=0, depends_on=None, task_type=t["task_type"]) for i, t in enumerate(tasks_found) if t["due_date"]]
-    plan = schedule(rows, prefs, [], datetime(2026, 10, 9, 15, 0))
+    plan = schedule(rows, prefs, [], datetime.now().replace(second=0, microsecond=0))
     line(bool(plan["sessions"]), f"scheduler produced {len(plan['sessions'])} study sessions")
 
 print("\nRESULT:", "NOT READY (fix FAIL items)" if failed else "ready (check any WARN items before judging)")
