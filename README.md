@@ -102,7 +102,7 @@ These instructions are for Windows 10/11 using **PowerShell**. Windows 11 is rec
 
 ```powershell
 git clone <REPOSITORY-URL>
-cd Benthoven-StudentAssistant
+cd Benthoven-Student_Assistant
 ```
 
 If you do not have a Git repository URL, use the ZIP method instead.
@@ -125,17 +125,6 @@ Run these commands from the project folder:
 py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
-
-If you installed Python 3.11 instead, use `py -3.11 -m venv .venv` in the first command.
-
-If PowerShell blocks the activation script, you can activate it for the current terminal session with:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-This changes the policy only for the current PowerShell process. Alternatively, you can skip activation and use `.venv\Scripts\python.exe` for each Python command.
 
 ### 4. Install Python dependencies
 
