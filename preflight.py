@@ -42,21 +42,26 @@ from benthoven.scheduler import schedule
 line(tesseract_available(), "Tesseract OCR found (needed for photos)", required=False)
 prefs = db.get_prefs()
 st = ollama_status(prefs["ollama_url"], prefs["ollama_model"])
-line(st["running"], "Ollama server running on localhost", required=False)
-line(bool(st["model_ready"]), f"model '{prefs['ollama_model']}' installed", required=False)
+line(st["running"], "Ollama server running on localhost")
+line(bool(st["model_ready"]), f"model '{prefs['ollama_model']}' installed")
 if st["running"] and st["model_ready"]:
     r = ollama_selftest(prefs["ollama_url"], prefs["ollama_model"])
-    line(r["ok"], f"local inference works ({r.get('seconds', '?')} s)" if r["ok"] else r["error"], required=False)
+    line(r["ok"], f"local inference works ({r.get('seconds', '?')} s)" if r["ok"] else r["error"])
 else:
-    print("      -> Without Ollama the app uses its rule-based fallback; for judging, make the local AI work.")
+    print("      -> Benthoven needs local AI: install Ollama, then run: ollama pull " + prefs["ollama_model"])
 
 today = date(2026, 10, 9)
 tasks_found = []
 for f in sorted((ROOT / "sample_docs").glob("*.txt")):
-    tasks, engine = extract_tasks(f.read_text(encoding="utf-8"), today, prefs["engine"], prefs["ollama_model"], prefs["ollama_url"])
+    try:
+        tasks, engine = extract_tasks(f.read_text(encoding="utf-8"), today, prefs["ollama_model"], prefs["ollama_url"])
+    except RuntimeError as exc:
+        line(False, f"{f.name}: {exc}")
+        break
     tasks_found += tasks
     print(f"      {f.name}: {len(tasks)} task(s) via {engine}")
-line(len(tasks_found) >= 4, f"extraction found {len(tasks_found)} tasks from the samples")
+if not failed:
+    line(len(tasks_found) >= 4, f"extraction found {len(tasks_found)} tasks from the samples")
 
 if tasks_found:
     from datetime import datetime

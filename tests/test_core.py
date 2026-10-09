@@ -169,10 +169,71 @@ def test_panels_render():
                      goal="Start it", status="planned", minutes_done=0)]
     status = dict(ocr=True, ai=False, net=False)
     h = header_html(NOW, [t], sessions, 2, status)
-    assert "Benthoven" in h and "2 to verify" in h and "&lt;Set&gt;" in h and "Offline" in h
+    assert "Task Manager" in h and "Benthoven" in h and "2 to verify" in h and "&lt;Set&gt;" in h and "Offline" in h
+    assert "not ready" in h and "rules mode" not in h
     assert "0%" in tracker_html(NOW, [t], sessions)
     cal = calendar_html(NOW, 0, [t], sessions)
     assert "October 2026" in cal and 'class="due"' in cal
     assert "November 2026" in calendar_html(NOW, 1, [t], sessions)
     assert "Start it" in upnext_html(NOW, [t], sessions)
-    assert "Tracker" in tracker_html(NOW, [], [])
+    assert "Confirm some tasks" in tracker_html(NOW, [], [])
+
+
+def test_chart_and_task_table_views():
+    from benthoven.panels import task_state, tasks_table_html, tracker_html
+    todo = mk(1, "Quiz <1>", "2026-10-20", 60, status="open", confirmed=1)
+    doing = mk(2, "Essay", "2026-10-08", 90, status="open", confirmed=1, minutes_done=30)
+    done = mk(3, "Lab", "2026-10-08", 60, status="done", confirmed=1)
+    old = mk(4, "Old quiz", "2026-09-01", 60, status="archived", confirmed=1)
+    for t, subj in ((todo, "Physics"), (doing, "Physics"), (done, "Chemistry"), (old, "")):
+        t["subject"] = subj
+    tasks = [todo, doing, done, old]
+    assert [task_state(t) for t in tasks] == ["todo", "progress", "done", "archived"]
+    chart = tracker_html(NOW, tasks, [])
+    assert "<b>3</b>" in chart and "Not started" in chart and "In progress" in chart   # archived is not counted
+    allv = tasks_table_html(tasks, "all", NOW)
+    assert "Quiz &lt;1&gt;" in allv and "Old quiz" not in allv and "October 20, 2026" in allv
+    assert "In progress" in allv and "30/90 min" in allv and 'class="due late"' in allv
+    assert "Lab" in tasks_table_html(tasks, "completed", NOW) and "Essay" not in tasks_table_html(tasks, "completed", NOW)
+    assert "Old quiz" in tasks_table_html(tasks, "archive", NOW)
+    assert "Nothing archived" in tasks_table_html([todo], "archive", NOW)
+
+
+def test_extract_tasks_requires_local_ollama(monkeypatch):
+    import pytest
+    from benthoven import extractor
+    monkeypatch.setattr(extractor, "ollama_status", lambda url, model: {"running": False, "models": [], "model_ready": False})
+    with pytest.raises(RuntimeError, match="not running"):
+        extractor.extract_tasks("Quiz on Friday", TODAY, "m", "http://x")
+    monkeypatch.setattr(extractor, "ollama_status", lambda url, model: {"running": True, "models": [], "model_ready": False})
+    with pytest.raises(RuntimeError, match="ollama pull m"):
+        extractor.extract_tasks("Quiz on Friday", TODAY, "m", "http://x")
+
+
+def test_ollama_status_matches_model_names(monkeypatch):
+    from benthoven import extractor
+
+    class R:
+        def json(self): return {"models": [{"name": "llama3.2:1b"}, {"name": "llama3.2:3b"}]}
+
+    monkeypatch.setattr(extractor.requests, "get", lambda *a, **k: R())
+    assert extractor.ollama_status("http://x", "llama3.2:3b")["model_ready"]
+    assert extractor.ollama_status("http://x", "llama3.2")["model_ready"]        # untagged name
+    assert not extractor.ollama_status("http://x", "llama3.2:7b")["model_ready"]  # no loose prefix match
+
+
+def test_ollama_selftest(monkeypatch):
+    from benthoven import extractor
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "ready"}}
+
+    monkeypatch.setattr(extractor.requests, "post", lambda *a, **k: R())
+    r = extractor.ollama_selftest("http://x", "m")
+    assert r["ok"] and "seconds" in r
+
+    def boom(*a, **k): raise ConnectionError("no server")
+    monkeypatch.setattr(extractor.requests, "post", boom)
+    r = extractor.ollama_selftest("http://x", "m")
+    assert not r["ok"] and "ConnectionError" in r["error"]

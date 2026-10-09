@@ -1,9 +1,8 @@
 """Structured task extraction (Stage 2).
 
-Two engines share one output format:
-  * ollama - required local LLM that proposes tasks as JSON; its output is then
-             re-validated by code (dates re-parsed, evidence checked against OCR text).
-Rule-based extraction is intentionally not a fallback: local AI is a project requirement.
+The required local LLM (Ollama) proposes tasks as JSON; its output is then re-validated by code
+(dates re-parsed, evidence checked against the OCR text).
+`extract_with_rules` is kept only as a deterministic helper for tests; it is never used as a fallback.
 
 AI proposes; code validates; the student confirms.
 """
@@ -12,6 +11,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import time
 from datetime import date
 from typing import Optional
 
@@ -243,9 +243,29 @@ def ollama_status(url: str = "http://localhost:11434", model: str = "") -> dict:
     try:
         r = requests.get(f"{url}/api/tags", timeout=2)
         names = [m["name"] for m in r.json().get("models", [])]
-        return {"running": True, "models": names, "model_ready": any(n.startswith(model) for n in names) if model else None}
+        return {"running": True, "models": names, "model_ready": any(n == model or n.split(":")[0] == model for n in names) if model else None}
     except Exception:
         return {"running": False, "models": [], "model_ready": False}
+
+
+def ollama_selftest(url: str, model: str) -> dict:
+    """Tiny real inference call, used by preflight.py and the Privacy tab."""
+    t0 = time.perf_counter()
+    try:
+        r = requests.post(
+            f"{url}/api/chat",
+            json={"model": model, "stream": False, "options": {"temperature": 0, "num_predict": 16},
+                  "messages": [{"role": "user", "content": "Reply with the single word: ready"}]},
+            timeout=120,
+        )
+        r.raise_for_status()
+        reply = (r.json().get("message", {}).get("content") or "").strip()
+        secs = round(time.perf_counter() - t0, 1)
+        if not reply:
+            return {"ok": False, "seconds": secs, "error": "The model returned an empty reply."}
+        return {"ok": True, "seconds": secs, "reply": reply[:60], "error": ""}
+    except Exception as exc:
+        return {"ok": False, "error": f"Local inference failed ({type(exc).__name__}): {str(exc)[:120]}"}
 
 
 def extract_with_ollama(text: str, today: date, model: str, url: str,
@@ -300,16 +320,17 @@ def extract_with_ollama(text: str, today: date, model: str, url: str,
     return out
 
 
-def extract_tasks(text: str, today: date, engine: str = "auto", model: str = "llama3.2:3b",
-                  url: str = "http://localhost:11434", ocr_conf: Optional[float] = None,
-                  existing: Optional[list[dict]] = None) -> tuple[list[dict], str]:
+def extract_tasks(text: str, today: date, model: str = "llama3.2:3b", url: str = "http://localhost:11434",
+                  ocr_conf: Optional[float] = None, existing: Optional[list[dict]] = None) -> tuple[list[dict], str]:
     """Extract tasks with the required local model; never silently use a rules fallback."""
     st = ollama_status(url, model)
     if not st["running"]:
         raise RuntimeError("Ollama is not running. Start Ollama and try again.")
     if not st["model_ready"]:
         raise RuntimeError(f"Required model '{model}' is missing. Run: ollama pull {model}")
+    t0 = time.perf_counter()
     try:
-        return extract_with_ollama(text, today, model, url, ocr_conf, existing), f"Local LLM ({model})"
+        tasks = extract_with_ollama(text, today, model, url, ocr_conf, existing)
     except Exception as exc:
         raise RuntimeError(f"Local model request failed ({type(exc).__name__}). Check Ollama and try again.") from exc
+    return tasks, f"Local AI: {model} \u00b7 {time.perf_counter() - t0:.1f} s"
