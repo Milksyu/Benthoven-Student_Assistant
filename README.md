@@ -58,6 +58,10 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 | Calendar | In-app calendar and `.ics` export |
 | Interface | Local web dashboard powered by Gradio |
 
+### The dashboard
+
+The top of the page is a Notion-style **Task Manager**: a donut chart of how many tasks are *Not started*, *In progress* and *Done*, next to a task table with **All Task**, **Completed** and **Archive** views. Status is derived from your data: a task is *In progress* once you have logged minutes on it, *Done* when it is finished, and *Archived* when you set its `status` to `archived` in **My tasks** (the status column accepts `open`, `done` or `archived`). Capture, Verify, My tasks, Plan, Progress, Settings and Privacy sit in the tab bar below, with the calendar and "Up next" card beside them. Edit tasks in **My tasks**; the table at the top is a read-only overview.
+
 This is an MVP, not a guaranteed deadline-management service. It does not currently read PDFs directly, automatically sync school portals, or guarantee that every deadline will be extracted correctly.
 
 ## System requirements
@@ -95,19 +99,19 @@ These instructions are for Windows 10/11 using **PowerShell**. Windows 11 is rec
 
 **If you downloaded the ZIP file:**
 
-1. Extract `Benthoven-StudentAssistant-main.zip` using File Explorer.
-2. Move the extracted `Benthoven-StudentAssistant-main` folder somewhere convenient, such as `Documents` or `Projects`.
+1. Extract `Benthoven-Student_Assistant-main.zip` using File Explorer.
+2. Move the extracted `Benthoven-Student_Assistant-main` folder somewhere convenient, such as `Documents` or `Projects`.
 3. Open that folder in File Explorer.
 4. Click the address bar, type `powershell`, and press Enter. PowerShell should open in the project folder.
 
-**If you are using Git:** open PowerShell in the folder where you keep projects, then run the repository's clone command. Replace `<REPOSITORY-URL>` with the actual URL of your Git repository:
+**If you are using Git:** open PowerShell in the folder where you keep projects, then run:
 
 ```powershell
-git clone <REPOSITORY-URL>
-cd Benthoven-StudentAssistant
+git clone https://github.com/Milksyu/Benthoven-Student_Assistant.git
+cd Benthoven-Student_Assistant
 ```
 
-If you do not have a Git repository URL, use the ZIP method instead.
+If you do not have Git installed, use the ZIP method instead.
 
 ### 2. Confirm Python is installed
 
@@ -197,7 +201,7 @@ These instructions use Terminal and assume Python 3.11 or 3.12 is installed. You
 Extract the ZIP in Finder, then open Terminal and change to the extracted folder. For example, if it is in Downloads:
 
 ```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
+cd ~/Downloads/Benthoven-Student_Assistant-main
 ```
 
 Adjust the path if you extracted it somewhere else.
@@ -279,7 +283,7 @@ Python 3.11 or 3.12 is recommended. If your distribution's default Python is old
 Extract the ZIP, then change to the extracted folder. For example:
 
 ```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
+cd ~/Downloads/Benthoven-Student_Assistant-main
 ```
 
 ### 3. Create the environment and install dependencies
@@ -394,7 +398,7 @@ Ollama and the configured Llama model are required for Benthoven. The app does n
 4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`. If you change the model in Settings, pull that exact model first and restart Benthoven.
 5. Test with a sample announcement and verify every suggested deadline before confirming it.
 
-The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; the app's fallback does not remove the need to verify results.
+The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements, so always verify the results.
 
 ---
 
@@ -423,7 +427,7 @@ Benthoven is designed to run locally:
 - The dashboard binds to `127.0.0.1` by default, so it is intended for access from the same computer.
 - Tasks, preferences, sessions, and captured text are stored in a local SQLite database. By default, the database is `data/benthoven.db` in the project directory.
 - Tesseract OCR runs on the computer.
-- The rule-based extraction path does not require a hosted AI service.
+- Task extraction never uses a hosted AI service or a cloud fallback.
 - Ollama sends model requests to the local Ollama service rather than a hosted model API. Ollama and its configured model are required for startup.
 
 **Important:** “Local-first” does not automatically mean every operation is offline. You need internet to install dependencies and download models. The app also checks internet reachability for its privacy/status display. Do not upload sensitive school, personal, or other confidential information unless you understand and accept how your local computer and files are managed.
@@ -501,18 +505,20 @@ Check the available study windows, existing commitments, estimated task duration
 ## Project structure
 
 ```text
-Benthoven-StudentAssistant-main/
+Benthoven-Student_Assistant-main/
 ├── app.py                  # Gradio dashboard and app entry point
+├── preflight.py            # Checks Python packages, Ollama, OCR and the sample pipeline
 ├── requirements.txt        # Python dependencies
 ├── benthoven/
 │   ├── ocr.py              # Local image OCR through Tesseract
 │   ├── dates.py            # Date/time parsing and ambiguity handling
-│   ├── extractor.py        # Rule-based and optional Ollama extraction
+│   ├── extractor.py        # Required local Ollama extraction + validation, self-test
 │   ├── scheduler.py        # Task ranking, session planning, plan differences
 │   ├── storage.py          # SQLite persistence and preferences
 │   ├── narrator.py         # Optional local-AI summary rewriting
 │   ├── ics.py              # Calendar (.ics) export
-│   └── panels.py           # Dashboard header, tracker, calendar, and cards
+│   ├── panels.py           # Cover header, donut chart, task table, calendar, cards
+│   └── style.py            # Notion-style CSS theme
 ├── sample_docs/            # Sample announcement text for demos
 ├── tests/                  # Automated tests
 ├── data/                   # Created locally for the SQLite database
@@ -526,7 +532,7 @@ Benthoven-StudentAssistant-main/
 - Extracted task names, subjects, dates, and time estimates may be wrong; user review is essential.
 - OCR quality depends on image clarity and the language data installed with Tesseract.
 - PDF and office-document parsing are not implemented in the current MVP.
-- Local AI performance varies by device and model; the rule-based fallback is less flexible with unusual wording.
+- Local AI performance varies by device and model, and unusual wording can still be misread.
 - Scheduling results depend on the accuracy of task estimates, availability, commitments, and deadlines entered by the student.
 - Calendar export creates an `.ics` file; it does not automatically sync changes with an external calendar.
 - This is a local app, not a hosted multi-user service. Avoid exposing it to a public network without adding appropriate authentication and security controls.

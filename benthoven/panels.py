@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import calendar
 import html
+import math
+import zlib
 from datetime import date, datetime, timedelta
 
 from .scheduler import due_dt
@@ -30,6 +32,27 @@ def _chip(text: str, kind: str = "") -> str:
     return f'<span class="bv-chip {kind}">{text}</span>'
 
 
+def task_state(t: dict) -> str:
+    """Notion-style board state: todo / progress / done / archived."""
+    if t["status"] == "archived":
+        return "archived"
+    if t["status"] == "done":
+        return "done"
+    return "progress" if int(t.get("minutes_done") or 0) > 0 else "todo"
+
+
+STATE_LABEL = {"todo": "Not started", "progress": "In progress", "done": "Done", "archived": "Archived"}
+SUBJECT_COLORS = ["red", "blue", "yellow", "green", "purple", "orange", "pink", "brown"]
+
+
+def _fmt_date(iso: str) -> str:
+    try:
+        d = date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return ""
+    return f"{d:%B} {d.day}, {d.year}"
+
+
 # ------------------------------------------------------------------ header
 def header_html(now: datetime, tasks: list[dict], sessions: list[dict], pending: int, status: dict) -> str:
     open_t = sorted(_open(tasks), key=due_dt)
@@ -37,58 +60,110 @@ def header_html(now: datetime, tasks: list[dict], sessions: list[dict], pending:
         nxt = open_t[0]
         delta = due_dt(nxt) - now
         kind = "bad" if delta.total_seconds() < 0 else "warn" if delta < timedelta(days=2) else "good"
-        deadline = _chip(f"⏰ Next deadline: <b>{e(nxt['task_name'])}</b> · {_when(delta)}", kind)
+        deadline = _chip(f"\u23f0 Next deadline: <b>{e(nxt['task_name'])}</b> \u00b7 {_when(delta)}", kind)
     else:
-        deadline = _chip("⏰ No open deadlines", "good")
+        deadline = _chip("\u23f0 No open deadlines", "good")
 
     today = [s for s in sessions if s["status"] == "planned" and s["start"][:10] == now.date().isoformat()]
     mins = sum(s["minutes"] for s in today)
-    load = _chip(f"📚 Today: {len(today)} session{'s' if len(today) != 1 else ''}, {mins // 60}h {mins % 60:02d}m", "")
-    verify = _chip(f"📝 {pending} to verify", "warn") if pending else ""
+    load = _chip(f"\U0001f4da Today: {len(today)} session{'s' if len(today) != 1 else ''}, {mins // 60}h {mins % 60:02d}m", "")
+    verify = _chip(f"\U0001f4dd {pending} to verify", "warn") if pending else ""
     chips = [
-        _chip("OCR ✅" if status["ocr"] else "OCR ⚠️ not installed", "good" if status["ocr"] else "warn"),
-        _chip("Local AI ✅" if status["ai"] else "Local AI ⚠️ rules mode", "good" if status["ai"] else "warn"),
-        _chip("✈️ Offline" if not status["net"] else "🌐 Online (not needed)", "good" if not status["net"] else ""),
+        _chip("OCR \u2705" if status["ocr"] else "OCR \u26a0\ufe0f not installed", "good" if status["ocr"] else "warn"),
+        _chip("Local AI \u2705" if status["ai"] else "Local AI \u26a0\ufe0f not ready", "good" if status["ai"] else "warn"),
+        _chip("\u2708\ufe0f Offline" if not status["net"] else "\U0001f310 Online (not needed)", "good" if not status["net"] else ""),
     ]
     return f"""
-<div class="bv-header">
-  <div class="bv-brand"><span class="bv-logo">🎼</span><div><div class="bv-title">Benthoven</div>
-  <div class="bv-sub">{now:%A, %B %d, %Y}</div></div></div>
-  <div class="bv-chips">{deadline}{load}{verify}</div>
-  <div class="bv-chips right">{''.join(chips)}</div>
-</div>"""
+<div class="bv-cover"><span class="bv-seal"></span></div>
+<div class="bv-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="bv-title">Task Manager</div>
+<div class="bv-sub">Benthoven Student Assistant \u00b7 {now:%A, %B} {now.day}, {now.year}</div>
+<div class="bv-chips">{deadline}{load}{verify}{''.join(chips)}</div>
+<hr class="bv-hr">"""
 
 
 # ----------------------------------------------------------------- tracker
+def _donut(counts: list[tuple[str, int, str]], total: int) -> str:
+    """SVG ring: one arc per (label, count, colour). A faint ring is drawn when empty."""
+    r, c = 44, 2 * math.pi * 44
+    arcs = ""
+    if total:
+        used = [x for x in counts if x[1]]
+        gap = 3 if len(used) > 1 else 0
+        offset = 0.0
+        for _, n, colour in used:
+            seg = c * n / total
+            arcs += (f'<circle cx="60" cy="60" r="{r}" fill="none" stroke="{colour}" stroke-width="14" '
+                     f'stroke-dasharray="{max(seg - gap, 0.5):.2f} {c:.2f}" stroke-dashoffset="{-offset:.2f}" '
+                     f'transform="rotate(-90 60 60)"/>')
+            offset += seg
+    else:
+        arcs = f'<circle cx="60" cy="60" r="{r}" fill="none" stroke="#e3e2e0" stroke-width="14"/>'
+    return f'<svg viewBox="0 0 120 120" class="bv-donut-svg" role="img" aria-label="{total} tasks">{arcs}</svg>'
+
+
 def tracker_html(now: datetime, tasks: list[dict], sessions: list[dict]) -> str:
-    if not tasks:
-        return '<div class="bv-card"><div class="bv-card-title">Tracker</div><div class="bv-empty">Confirm some tasks to start tracking progress.</div></div>'
-    total = sum(int(t["estimated_minutes"]) for t in tasks) or 1
-    done = sum(int(t["estimated_minutes"]) if t["status"] == "done" else min(int(t["minutes_done"]), int(t["estimated_minutes"])) for t in tasks)
-    pct = round(100 * done / total)
-    open_t = _open(tasks)
-    overdue = [t for t in open_t if due_dt(t) < now]
-    week_ago = (now - timedelta(days=7)).isoformat(timespec="minutes")
-    week = sum(s["minutes_done"] for s in sessions if s["status"] in ("completed", "partial") and s["start"] >= week_ago)
-    bars = ""
-    for t in sorted(open_t, key=due_dt)[:5]:
-        est = max(int(t["estimated_minutes"]), 1)
-        p = min(100, round(100 * int(t["minutes_done"]) / est))
-        bars += (f'<div class="bv-row"><div class="bv-rowtop"><span>{e(t["task_name"])}</span><span>{p}%</span></div>'
-                 f'<div class="bv-bar"><div style="width:{p}%"></div></div></div>')
+    live = [t for t in tasks if t["status"] != "archived"]
+    states = [task_state(t) for t in live]
+    counts = [("Not started", states.count("todo"), "#e3e2e0"),
+              ("In progress", states.count("progress"), "#2f9be9"),
+              ("Done", states.count("done"), "#5fbf8f")]
+    legend = "".join(f'<li><i style="background:{col}"></i>{lab}</li>' for lab, _, col in counts)
+
+    foot = '<div class="bv-chart-foot">Confirm some tasks to see them here.</div>'
+    if live:
+        total_min = sum(int(t["estimated_minutes"]) for t in live) or 1
+        done_min = sum(int(t["estimated_minutes"]) if t["status"] == "done"
+                       else min(int(t["minutes_done"]), int(t["estimated_minutes"])) for t in live)
+        overdue = sum(1 for t in _open(live) if due_dt(t) < now)
+        week_ago = (now - timedelta(days=7)).isoformat(timespec="minutes")
+        week = sum(s["minutes_done"] for s in sessions
+                   if s["status"] in ("completed", "partial") and s["start"] >= week_ago)
+        foot = (f'<div class="bv-chart-foot"><b>{round(100 * done_min / total_min)}%</b> of planned work done<br>'
+                f'<span class="{"bad" if overdue else ""}">{overdue} overdue</span> \u00b7 {week // 60}h{week % 60:02d} last 7 d</div>')
     return f"""
-<div class="bv-card">
-  <div class="bv-card-title">Tracker</div>
-  <div class="bv-big">{pct}%<small> of planned work done</small></div>
-  <div class="bv-bar big"><div style="width:{pct}%"></div></div>
-  <div class="bv-stats">
-    <div><b>{len(open_t)}</b><span>open</span></div>
-    <div><b>{sum(1 for t in tasks if t['status'] == 'done')}</b><span>done</span></div>
-    <div class="{'bad' if overdue else ''}"><b>{len(overdue)}</b><span>overdue</span></div>
-    <div><b>{week // 60}h{week % 60:02d}</b><span>last 7 d</span></div>
+<div class="bv-chart">
+  <div class="bv-chart-head">\u25d4 Chart</div>
+  <div class="bv-chart-body">
+    <div class="bv-donut">{_donut(counts, len(live))}<div class="bv-donut-num"><b>{len(live)}</b><span>Total</span></div></div>
+    <ul class="bv-legend-list">{legend}</ul>
+    {foot}
   </div>
-  {bars}
 </div>"""
+
+
+# ------------------------------------------------------------- task table
+def tasks_table_html(tasks: list[dict], view: str, now: datetime) -> str:
+    """view: 'all' (everything not archived), 'completed' (done), 'archive' (archived)."""
+    keep = {"all": lambda t: task_state(t) != "archived",
+            "completed": lambda t: task_state(t) == "done",
+            "archive": lambda t: task_state(t) == "archived"}[view]
+    rows = ""
+    for t in sorted((t for t in tasks if keep(t)), key=lambda t: (t.get("due_date") or "9999", t["id"])):
+        state = task_state(t)
+        subj = (t.get("subject") or "").strip()
+        colour = SUBJECT_COLORS[zlib.crc32(subj.lower().encode()) % len(SUBJECT_COLORS)]
+        pill = f'<span class="bv-pill {colour}" title="{e(subj)}">{e(subj)}</span>' if subj else '<span class="bv-muted">\u2014</span>'
+        late = state in ("todo", "progress") and bool(t.get("due_date")) and due_dt(t) < now
+        est = max(int(t["estimated_minutes"]), 1)
+        done = est if state == "done" else min(int(t.get("minutes_done") or 0), est)
+        pct = round(100 * done / est)
+        rows += (
+            f'<tr><td class="name">{e(t["task_name"])}</td><td>{pill}</td>'
+            f'<td><span class="bv-status {state}"><i></i>{STATE_LABEL[state]}</span></td>'
+            f'<td class="due{" late" if late else ""}">{_fmt_date(t.get("due_date", ""))}</td>'
+            f'<td class="prog"><div class="bv-bar"><div style="width:{pct}%"></div></div>'
+            f'<span>{done}/{est} min</span></td></tr>')
+    if not rows:
+        msg = {"all": "No tasks yet. Capture an announcement or add a task manually.",
+               "completed": "Nothing completed yet.",
+               "archive": "Nothing archived. Set a task's status to <b>archived</b> in My tasks."}[view]
+        rows = f'<tr><td colspan="5" class="bv-empty">{msg}</td></tr>'
+    return f"""
+<div class="bv-tbl-wrap"><table class="bv-tbl">
+  <thead><tr><th>\u25a4 Task Name</th><th>\u25ce Subject</th><th>\u2611 Status</th><th>\u25a6 Deadline</th><th>\u270e Progress</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table></div>"""
 
 
 # ---------------------------------------------------------------- calendar

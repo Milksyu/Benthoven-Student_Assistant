@@ -19,12 +19,13 @@ import pandas as pd
 
 from benthoven import storage as db
 from benthoven.dates import parse_due_date
-from benthoven.extractor import extract_tasks, ollama_status
+from benthoven.extractor import extract_tasks, ollama_selftest, ollama_status
 from benthoven.ics import sessions_to_ics
 from benthoven.narrator import narrate
 from benthoven.ocr import read_document, tesseract_available
-from benthoven.panels import calendar_html, header_html, tracker_html, upnext_html
+from benthoven.panels import calendar_html, header_html, tasks_table_html, tracker_html, upnext_html
 from benthoven.scheduler import diff_plans, schedule, summarize
+from benthoven.style import CSS
 
 TASK_TYPES = ["Assignment", "Quiz", "Exam", "Project", "Other"]
 VERIFY_COLS = ["id", "confirm", "delete", "task_name", "subject", "due_date", "estimated_minutes",
@@ -141,7 +142,7 @@ def do_extract(files, pasted):
     for name, text, conf in sources:
         existing = db.list_tasks()
         try:
-            tasks, engine = extract_tasks(text, now.date(), prefs["engine"], prefs["ollama_model"], prefs["ollama_url"], conf, existing)
+            tasks, engine = extract_tasks(text, now.date(), prefs["ollama_model"], prefs["ollama_url"], conf, existing)
         except RuntimeError as exc:
             notes.append(f"**{name}**: local AI could not process this document. {exc}")
             last_text = text
@@ -151,7 +152,7 @@ def do_extract(files, pasted):
         ocr = f", OCR confidence {conf:.0f}%" if conf is not None else ""
         if tasks:
             review = sum(1 for t in tasks if t["needs_review"])
-            notes.append(f"**{name}**: {len(tasks)} task(s) found by *{engine}*{ocr}. {review} need your attention. Go to **2. Verify**.")
+            notes.append(f"**{name}**: {len(tasks)} task(s) found by *{engine}*{ocr}. {review} need your attention. Go to **Verify**.")
         else:
             notes.append(f"**{name}**: no deadlines found{ocr}. Check the detected text below, or add the task manually.")
         last_text = text
@@ -219,6 +220,14 @@ def save_verified(df: pd.DataFrame):
     return msg, verify_df(), tasks_df()
 
 
+TASK_STATUSES = ("open", "done", "archived")
+
+
+def _clean_status(x) -> str:
+    v = _str(x).lower()
+    return v if v in TASK_STATUSES else "open"
+
+
 def save_tasks(df: pd.DataFrame):
     today, errors = _now().date(), []
     for _, r in df.iterrows():
@@ -234,7 +243,7 @@ def save_tasks(df: pd.DataFrame):
                        estimated_minutes=max(_int(r["estimated_minutes"], 60), 5), minutes_done=max(_int(r["minutes_done"]), 0),
                        importance=min(max(_int(r["importance"], 3), 1), 5),
                        priority_override=min(max(_int(r["priority_override"]), 0), 5),
-                       depends_on=_int(r["depends_on"]) or None, status=_str(r["status"]) or "open")
+                       depends_on=_int(r["depends_on"]) or None, status=_clean_status(r["status"]))
     return ("Saved." if not errors else "Saved, except:\n" + "\n".join(f"- {e}" for e in errors)), tasks_df()
 
 
@@ -375,6 +384,19 @@ For the offline demo: install everything and pull the model first, then disconne
 """
 
 
+def run_selftest() -> str:
+    p = db.get_prefs()
+    st = ollama_status(p["ollama_url"], p["ollama_model"])
+    if not st["running"]:
+        return "\u26a0\ufe0f Ollama is not running. Start it and try again."
+    if not st["model_ready"]:
+        return f"\u26a0\ufe0f Model `{p['ollama_model']}` is not pulled yet. Run: `ollama pull {p['ollama_model']}`"
+    r = ollama_selftest(p["ollama_url"], p["ollama_model"])
+    if not r["ok"]:
+        return f"\u26a0\ufe0f {r['error']}"
+    return f"\u2705 Local inference works: model `{p['ollama_model']}` answered in **{r['seconds']} s** (no network needed)."
+
+
 # ---------------------------------------------------------- dashboard panels
 _status_cache: dict = {"t": 0.0, "v": None}
 
@@ -397,47 +419,12 @@ def refresh_panels(month_offset: int = 0):
     pending = len(db.list_tasks(confirmed=False))
     return (header_html(now, tasks, sessions, pending, _status()),
             tracker_html(now, tasks, sessions),
+            tasks_table_html(tasks, "all", now),
+            tasks_table_html(tasks, "completed", now),
+            tasks_table_html(tasks, "archive", now),
             calendar_html(now, int(month_offset or 0), tasks, sessions),
             upnext_html(now, tasks, sessions))
 
-
-CSS = """
-.gradio-container{max-width:1500px !important}
-.bv-header{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 18px;border-radius:14px;
-  background:linear-gradient(135deg,#3b2a6d,#5b3fa8);color:#fff}
-.bv-brand{display:flex;align-items:center;gap:10px}.bv-logo{font-size:30px}
-.bv-title{font-size:22px;font-weight:700;letter-spacing:.5px}.bv-sub{font-size:12px;opacity:.8}
-.bv-chips{display:flex;flex-wrap:wrap;gap:8px;flex:1}.bv-chips.right{justify-content:flex-end;flex:0 1 auto}
-.bv-header,.bv-header *{color:#fff !important}
-.bv-chip{background:rgba(255,255,255,.16);padding:5px 11px;border-radius:999px;font-size:12.5px;white-space:nowrap}
-.bv-chip.good{background:rgba(80,200,120,.30)}.bv-chip.warn{background:rgba(255,190,60,.38)}.bv-chip.bad{background:rgba(255,90,90,.45)}
-.bv-card{border:1px solid var(--border-color-primary,#8884);border-radius:14px;padding:14px;
-  background:var(--background-fill-secondary,#f6f6f9);color:var(--body-text-color,#222)}
-.bv-card-title{font-weight:700;margin-bottom:8px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;opacity:.75}
-.bv-big{font-size:34px;font-weight:700}.bv-big small{font-size:12px;font-weight:400;opacity:.7;margin-left:6px}
-.bv-bar{height:7px;border-radius:99px;background:var(--border-color-primary,#8884);overflow:hidden}
-.bv-bar.big{height:10px;margin:6px 0 10px}.bv-bar div{height:100%;background:linear-gradient(90deg,#7c5cff,#46c28e)}
-.bv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 12px;text-align:center}
-.bv-stats b{display:block;font-size:17px}.bv-stats span{font-size:11px;opacity:.7}.bv-stats .bad b{color:#e5484d}
-.bv-row{margin:7px 0}.bv-rowtop{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;gap:8px}
-.bv-cal{width:100%;border-collapse:collapse;text-align:center;table-layout:fixed}
-.bv-cal,.bv-cal th,.bv-cal td{border:none !important}
-.bv-cal th{font-size:11px;opacity:.6;padding:3px 0}.bv-cal td{height:38px;font-size:12.5px;vertical-align:top;padding-top:3px;border-radius:8px}
-.bv-cal td.other{opacity:.35}.bv-cal td.today span{background:#5b3fa8;color:#fff;border-radius:99px;padding:1px 6px}
-.bv-cal td div{display:flex;justify-content:center;gap:3px;margin-top:2px;min-height:7px}
-.bv-cal i,.bv-legend i{display:inline-block;width:7px;height:7px;border-radius:99px}
-i.due{background:#e5484d}i.study{background:#4c8dff}.bv-legend{font-size:11.5px;opacity:.75;margin-top:6px}
-.bv-next{padding:10px;border-radius:10px;background:rgba(91,63,168,.14);margin-bottom:8px}
-.bv-next-time{font-size:12px;opacity:.75}.bv-next-task{font-weight:700;font-size:16px;margin:2px 0}
-.bv-next-task small{font-weight:400;opacity:.7}.bv-next-goal{font-size:12.5px;opacity:.85}
-.bv-mini{font-size:12.5px;padding:4px 0}.bv-sep{margin:10px 0 4px;font-size:11px;text-transform:uppercase;opacity:.6;letter-spacing:.6px}
-.bv-dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:#46c28e;margin-right:6px}
-.bv-dot.warn{background:#f5a524}.bv-dot.bad{background:#e5484d}.bv-muted{opacity:.65}.bv-empty{font-size:13px;opacity:.7;padding:6px 0}
-.bv-actions-title{font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.6px;opacity:.75;margin:2px 0 6px}
-.bv-main{border:1px solid var(--border-color-primary,#8884);border-radius:14px;padding:16px;min-height:640px}
-.bv-calnav{flex-wrap:nowrap !important;gap:6px}.bv-calnav button{min-width:0 !important}
-.bv-nav button{justify-content:flex-start !important;text-align:left}
-"""
 
 VIEWS = ["capture", "verify", "tasks", "plan", "progress", "settings", "privacy"]
 NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My tasks", "plan": "🗓️ Plan",
@@ -448,132 +435,144 @@ NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My task
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Benthoven") as demo:
         cal_offset = gr.State(0)
-        header = gr.HTML()
+        with gr.Column(elem_classes="bv-page"):
+            header = gr.HTML()
 
-        with gr.Row(equal_height=False):
-            # ---------------- left column: tracker + actions
-            with gr.Column(scale=3, min_width=240):
-                tracker = gr.HTML()
-                with gr.Group(elem_classes="bv-nav"):
-                    gr.HTML('<div class="bv-actions-title" style="padding:10px 12px 0">Actions</div>')
-                    nav_btns = {v: gr.Button(NAV[v], variant="primary" if v == "capture" else "secondary") for v in VIEWS}
-                    gr.HTML('<div class="bv-actions-title" style="padding:10px 12px 0">Quick actions</div>')
-                    replan_btn = gr.Button("⚡ Replan now")
-                    ics_quick = gr.Button("📅 Export .ics")
+            # ---------------- dashboard: donut chart + Notion-style task table
+            with gr.Row(equal_height=False):
+                with gr.Column(scale=1, min_width=220, elem_classes="bv-chartcol"):
+                    tracker = gr.HTML()
+                with gr.Column(scale=4, min_width=420, elem_classes="bv-tablecard"):
+                    with gr.Tabs():
+                        with gr.Tab("\u25a4 All Task"):
+                            t_all = gr.HTML()
+                        with gr.Tab("\u2611 Completed"):
+                            t_done = gr.HTML()
+                        with gr.Tab("\u25a3 Archive"):
+                            t_arch = gr.HTML()
 
-            # ---------------- centre: main window
-            with gr.Column(scale=8, min_width=480, elem_classes="bv-main"):
-                # 1 Capture
-                with gr.Column(visible=True) as v_capture:
-                    gr.Markdown("### Capture\nAdd assignment photos, screenshots, text files, or paste an announcement.")
-                    files = gr.File(label="Assignment photos, screenshots, or .txt/.md files", file_count="multiple",
-                                    file_types=[".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".txt", ".md"])
-                    pasted = gr.Textbox(label="...or paste announcement text", lines=5)
-                    extract_btn = gr.Button("Extract tasks", variant="primary")
-                    extract_msg = gr.Markdown()
-                    with gr.Accordion("Text detected in the document (OCR output, kept separate from AI results)", open=False):
-                        ocr_box = gr.Textbox(lines=8, interactive=False, show_label=False)
-                    with gr.Accordion("Add a task manually", open=False):
+            # ---------------- workspace tab bar
+            with gr.Row(elem_classes="bv-tabs"):
+                nav_btns = {v: gr.Button(NAV[v], variant="primary" if v == "capture" else "secondary") for v in VIEWS}
+                replan_btn = gr.Button("\u26a1 Replan now", elem_classes="bv-quick")
+                ics_quick = gr.Button("\U0001f4c5 Export .ics", elem_classes="bv-quick")
+
+            with gr.Row(equal_height=False):
+                # ---------------- centre: main window
+                with gr.Column(scale=8, min_width=480, elem_classes="bv-main"):
+                    # 1 Capture
+                    with gr.Column(visible=True) as v_capture:
+                        gr.Markdown("### Capture\nAdd assignment photos, screenshots, text files, or paste an announcement.")
+                        files = gr.File(label="Assignment photos, screenshots, or .txt/.md files", file_count="multiple",
+                                        file_types=[".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".txt", ".md"])
+                        pasted = gr.Textbox(label="...or paste announcement text", lines=5)
+                        extract_btn = gr.Button("Extract tasks", variant="primary")
+                        extract_msg = gr.Markdown()
+                        with gr.Accordion("Text detected in the document (OCR output, kept separate from AI results)", open=False):
+                            ocr_box = gr.Textbox(lines=8, interactive=False, show_label=False)
+                        with gr.Accordion("Add a task manually", open=False):
+                            with gr.Row():
+                                m_name = gr.Textbox(label="Task name")
+                                m_subject = gr.Textbox(label="Subject")
+                                m_due = gr.Textbox(label="Due date (YYYY-MM-DD)")
+                            with gr.Row():
+                                m_min = gr.Number(label="Estimated minutes", value=60, precision=0)
+                                m_type = gr.Dropdown(TASK_TYPES, value="Assignment", label="Type")
+                            m_btn = gr.Button("Add task")
+                            m_msg = gr.Markdown()
+
+                    # 2 Verify
+                    with gr.Column(visible=False) as v_verify:
+                        gr.Markdown("### Verify\nCheck each AI-proposed task. **Click a row** to see the evidence from the original document. "
+                                    "Tick **confirm** to add it to your planner. Nothing enters the schedule until you confirm.")
+                        v_df = gr.Dataframe(value=verify_df, headers=VERIFY_COLS, interactive=True, wrap=True, show_search=False,
+                                            column_widths=[50, 85, 80, 200, 150, 110, 90, 100, 90, 90, 320],
+                                            datatype=["number", "bool", "bool", "str", "str", "str", "number", "str", "number", "number", "str"])
+                        evidence = gr.Markdown("Select a row to see its evidence.")
+                        v_btn = gr.Button("Save changes / confirm ticked tasks", variant="primary")
+                        v_msg = gr.Markdown()
+
+                    # 3 My tasks
+                    with gr.Column(visible=False) as v_tasks:
+                        gr.Markdown("### My tasks\nConfirmed tasks. Set **priority_override** (1-5) to override the engine, or **depends_on** (a task id) to order work.")
+                        t_df = gr.Dataframe(value=tasks_df, headers=TASK_COLS, interactive=True, wrap=True, show_search=False,
+                                            column_widths=[50, 80, 220, 150, 110, 90, 90, 90, 110, 100, 80],
+                                            datatype=["number", "bool", "str", "str", "str", "number", "number", "number", "number", "number", "str"])
+                        t_btn = gr.Button("Save task changes")
+                        t_msg = gr.Markdown()
+
+                    # 4 Plan
+                    with gr.Column(visible=False) as v_plan:
+                        gr.Markdown("### Plan")
                         with gr.Row():
-                            m_name = gr.Textbox(label="Task name")
-                            m_subject = gr.Textbox(label="Subject")
-                            m_due = gr.Textbox(label="Due date (YYYY-MM-DD)")
+                            plan_btn = gr.Button("Generate / refresh plan", variant="primary")
+                            use_ai = gr.Checkbox(label="Explain in friendlier words with local AI (optional)", value=False)
+                        summary = gr.Markdown()
+                        conflicts = gr.Markdown()
+                        changes = gr.Markdown()
+                        gr.Markdown("#### Today")
+                        today_t = gr.Dataframe(interactive=False, wrap=True, show_search=False)
+                        gr.Markdown("#### Priority ranking")
+                        rank_t = gr.Dataframe(interactive=False, wrap=True, show_search=False)
+                        gr.Markdown("#### Weekly timetable")
+                        time_t = gr.Dataframe(value=timetable_df, interactive=False, wrap=True, show_search=False)
+                        ics_file = gr.File(label="Calendar file (.ics)", interactive=False)
+
+                    # 5 Progress
+                    with gr.Column(visible=False) as v_progress:
+                        gr.Markdown("### Progress\nMark a session, and Benthoven replans the rest. Deadlines never change; only the schedule does.")
+                        s_pick = gr.Dropdown(choices=session_choices(), label="Session", interactive=True)
+                        s_status = gr.Radio(["Completed", "Partly done", "Couldn't do it"], value="Completed", label="How did it go?")
                         with gr.Row():
-                            m_min = gr.Number(label="Estimated minutes", value=60, precision=0)
-                            m_type = gr.Dropdown(TASK_TYPES, value="Assignment", label="Type")
-                        m_btn = gr.Button("Add task")
-                        m_msg = gr.Markdown()
+                            s_min = gr.Number(label="Minutes actually done (if partly)", value=0, precision=0)
+                            s_extra = gr.Number(label="Extra minutes the task still needs", value=0, precision=0)
+                            s_fin = gr.Checkbox(label="This task is fully finished")
+                        s_btn = gr.Button("Update and replan", variant="primary")
+                        s_msg = gr.Markdown()
 
-                # 2 Verify
-                with gr.Column(visible=False) as v_verify:
-                    gr.Markdown("### Verify\nCheck each AI-proposed task. **Click a row** to see the evidence from the original document. "
-                                "Tick **confirm** to add it to your planner. Nothing enters the schedule until you confirm.")
-                    v_df = gr.Dataframe(value=verify_df, headers=VERIFY_COLS, interactive=True, wrap=True, show_search=False,
-                                        column_widths=[50, 85, 80, 200, 150, 110, 90, 100, 90, 90, 320],
-                                        datatype=["number", "bool", "bool", "str", "str", "str", "number", "str", "number", "number", "str"])
-                    evidence = gr.Markdown("Select a row to see its evidence.")
-                    v_btn = gr.Button("Save changes / confirm ticked tasks", variant="primary")
-                    v_msg = gr.Markdown()
+                    # 6 Settings
+                    with gr.Column(visible=False) as v_settings:
+                        gr.Markdown("### Settings")
+                        with gr.Row():
+                            wk_s, wk_e = gr.Textbox(label="Weekday study from"), gr.Textbox(label="Weekday study until (sleep boundary)")
+                            we_s, we_e = gr.Textbox(label="Weekend study from"), gr.Textbox(label="Weekend study until")
+                        with gr.Row():
+                            f_s, f_e = gr.Textbox(label="High-focus window from"), gr.Textbox(label="High-focus window until")
+                            energy = gr.Dropdown(["low", "normal", "high"], label="Energy today")
+                        with gr.Row():
+                            sess = gr.Number(label="Session length (min)", precision=0)
+                            brk = gr.Number(label="Break (min)", precision=0)
+                            cap = gr.Number(label="Max study per day (min)", precision=0)
+                        with gr.Row():
+                            engine = gr.Dropdown(["ollama"], value="ollama", label="Extraction engine (required local AI)", interactive=False)
+                            model = gr.Textbox(label="Ollama model")
+                            override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
+                        gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
+                        comm_df = gr.Dataframe(value=commitments_df, headers=["date (YYYY-MM-DD)", "start (HH:MM)", "end (HH:MM)", "label"],
+                                               interactive=True, row_count=(3, "dynamic"), show_search=False)
+                        st_btn = gr.Button("Save settings", variant="primary")
+                        st_msg = gr.Markdown()
 
-                # 3 My tasks
-                with gr.Column(visible=False) as v_tasks:
-                    gr.Markdown("### My tasks\nConfirmed tasks. Set **priority_override** (1-5) to override the engine, or **depends_on** (a task id) to order work.")
-                    t_df = gr.Dataframe(value=tasks_df, headers=TASK_COLS, interactive=True, wrap=True, show_search=False,
-                                        column_widths=[50, 80, 220, 150, 110, 90, 90, 90, 110, 100, 80],
-                                        datatype=["number", "bool", "str", "str", "str", "number", "number", "number", "number", "number", "str"])
-                    t_btn = gr.Button("Save task changes")
-                    t_msg = gr.Markdown()
+                    # 7 Privacy
+                    with gr.Column(visible=False) as v_privacy:
+                        gr.Markdown("### Privacy & offline status")
+                        p_md = gr.Markdown(privacy_status)
+                        p_btn = gr.Button("Refresh status")
+                        selftest_btn = gr.Button("Run local AI self-test", variant="primary")
+                        selftest_out = gr.Markdown()
 
-                # 4 Plan
-                with gr.Column(visible=False) as v_plan:
-                    gr.Markdown("### Plan")
-                    with gr.Row():
-                        plan_btn = gr.Button("Generate / refresh plan", variant="primary")
-                        use_ai = gr.Checkbox(label="Explain in friendlier words with local AI (optional)", value=False)
-                    summary = gr.Markdown()
-                    conflicts = gr.Markdown()
-                    changes = gr.Markdown()
-                    gr.Markdown("#### Today")
-                    today_t = gr.Dataframe(interactive=False, wrap=True, show_search=False)
-                    gr.Markdown("#### Priority ranking")
-                    rank_t = gr.Dataframe(interactive=False, wrap=True, show_search=False)
-                    gr.Markdown("#### Weekly timetable")
-                    time_t = gr.Dataframe(value=timetable_df, interactive=False, wrap=True, show_search=False)
-                    ics_file = gr.File(label="Calendar file (.ics)", interactive=False)
-
-                # 5 Progress
-                with gr.Column(visible=False) as v_progress:
-                    gr.Markdown("### Progress\nMark a session, and Benthoven replans the rest. Deadlines never change; only the schedule does.")
-                    s_pick = gr.Dropdown(choices=session_choices(), label="Session", interactive=True)
-                    s_status = gr.Radio(["Completed", "Partly done", "Couldn't do it"], value="Completed", label="How did it go?")
-                    with gr.Row():
-                        s_min = gr.Number(label="Minutes actually done (if partly)", value=0, precision=0)
-                        s_extra = gr.Number(label="Extra minutes the task still needs", value=0, precision=0)
-                        s_fin = gr.Checkbox(label="This task is fully finished")
-                    s_btn = gr.Button("Update and replan", variant="primary")
-                    s_msg = gr.Markdown()
-
-                # 6 Settings
-                with gr.Column(visible=False) as v_settings:
-                    gr.Markdown("### Settings")
-                    with gr.Row():
-                        wk_s, wk_e = gr.Textbox(label="Weekday study from"), gr.Textbox(label="Weekday study until (sleep boundary)")
-                        we_s, we_e = gr.Textbox(label="Weekend study from"), gr.Textbox(label="Weekend study until")
-                    with gr.Row():
-                        f_s, f_e = gr.Textbox(label="High-focus window from"), gr.Textbox(label="High-focus window until")
-                        energy = gr.Dropdown(["low", "normal", "high"], label="Energy today")
-                    with gr.Row():
-                        sess = gr.Number(label="Session length (min)", precision=0)
-                        brk = gr.Number(label="Break (min)", precision=0)
-                        cap = gr.Number(label="Max study per day (min)", precision=0)
-                    with gr.Row():
-                        engine = gr.Dropdown(["ollama"], value="ollama", label="Extraction engine (required local AI)", interactive=False)
-                        model = gr.Textbox(label="Ollama model")
-                        override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
-                    gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
-                    comm_df = gr.Dataframe(value=commitments_df, headers=["date (YYYY-MM-DD)", "start (HH:MM)", "end (HH:MM)", "label"],
-                                           interactive=True, row_count=(3, "dynamic"), show_search=False)
-                    st_btn = gr.Button("Save settings", variant="primary")
-                    st_msg = gr.Markdown()
-
-                # 7 Privacy
-                with gr.Column(visible=False) as v_privacy:
-                    gr.Markdown("### Privacy & offline status")
-                    p_md = gr.Markdown(privacy_status)
-                    p_btn = gr.Button("Refresh status")
-
-            # ---------------- right column: calendar + up next
-            with gr.Column(scale=4, min_width=280):
-                calendar_p = gr.HTML()
-                with gr.Row(elem_classes="bv-calnav"):
-                    cal_prev = gr.Button("◀", size="sm")
-                    cal_today = gr.Button("Today", size="sm")
-                    cal_next = gr.Button("▶", size="sm")
-                upnext = gr.HTML()
+                # ---------------- right column: calendar + up next
+                with gr.Column(scale=4, min_width=280):
+                    calendar_p = gr.HTML()
+                    with gr.Row(elem_classes="bv-calnav"):
+                        cal_prev = gr.Button("◀", size="sm")
+                        cal_today = gr.Button("Today", size="sm")
+                        cal_next = gr.Button("▶", size="sm")
+                    upnext = gr.HTML()
 
         # ------------------------------------------------------------ wiring
         views = [v_capture, v_verify, v_tasks, v_plan, v_progress, v_settings, v_privacy]
-        panels = [header, tracker, calendar_p, upnext]
+        panels = [header, tracker, t_all, t_done, t_arch, calendar_p, upnext]
         nav_list = [nav_btns[v] for v in VIEWS]
 
         def switch(name: str):
@@ -600,6 +599,7 @@ def build_ui() -> gr.Blocks:
         pref_comps = [wk_s, wk_e, we_s, we_e, f_s, f_e, sess, brk, cap, energy, engine, model, override]
         after(st_btn.click(save_settings, pref_comps + [comm_df], [st_msg, comm_df]))
         p_btn.click(privacy_status, None, [p_md])
+        selftest_btn.click(run_selftest, None, [selftest_out])
 
         def move_cal(offset, step):
             new = 0 if step == 0 else offset + step
