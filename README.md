@@ -15,6 +15,7 @@
 - [System requirements](#system-requirements)
 - [What you need to install](#what-you-need-to-install)
 - [Installation on Windows](#installation-on-windows)
+- [Installation on Linux](#installation-on-linux)
 - [Start the app](#start-the-app)
 - [First-time walkthrough](#first-time-walkthrough)
 - [Required local AI with Ollama](#required-local-ai-with-ollama)
@@ -62,7 +63,7 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 
 ### Recommended setup
 
-- **Operating system:** Windows 10/11 (the setup guide in this README is for Windows).
+- **Operating system:** Windows 10/11 and Ubuntu/Debian-based Linux distributions (installation guides are provided for both).
 - **Python:** Python **3.11 or 3.14** are tested in CI. Use a 64-bit installation.
 - **Memory:** 4 GB RAM is a practical baseline for the app without local AI. More memory is recommended if you also run a local language model.
 - **Storage:** Allow at least 1 GB for the project, Python packages, and sample data. Optional AI models can require several additional gigabytes.
@@ -179,18 +180,111 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Keep the Po
 
 ---
 
+## Installation on Linux
+
+These instructions target Ubuntu and Debian-based distributions. Other distributions can use the same Python setup, but may have different package-manager commands. **You do not need to install Tesseract**: image OCR uses RapidOCR and ONNX Runtime from the Python requirements.
+
+### 1. Install system prerequisites
+
+Open a terminal and run:
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip curl
+```
+
+Check your Python version:
+
+```bash
+python3 --version
+```
+
+Python 3.11 and 3.14 are tested in the project’s CI workflow. Use Python 3.11 or newer; if your distribution’s default is older, install a supported Python version for your distribution and use that executable in the commands below.
+
+### 2. Download the project
+
+Clone the repository and enter the project directory:
+
+```bash
+git clone https://github.com/Milksyu/Benthoven-Student_Assistant.git
+cd Benthoven-Student_Assistant
+```
+
+You can also download the project ZIP from GitHub and open a terminal in the extracted folder.
+
+### 3. Create and activate a virtual environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+After activation, your terminal prompt should show `.venv` or a similar environment marker.
+
+### 4. Install the Python dependencies
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Benthoven’s image OCR is provided by RapidOCR and ONNX Runtime. Verify that these packages import correctly:
+
+```bash
+python -c "from rapidocr import RapidOCR; import onnxruntime; print('Local OCR ready')"
+```
+
+No separate OCR executable or PATH configuration is required. The first OCR operation may take a little longer while the engine initializes.
+
+### 5. Install Ollama and download the required model
+
+Install Ollama using the [official Linux instructions](https://github.com/ollama/ollama/blob/main/docs/linux.mdx):
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Download Benthoven’s default local model:
+
+```bash
+ollama pull llama3.2:3b
+ollama list
+```
+
+Make sure `llama3.2:3b` appears in the list. The Ollama service may start automatically. If it is not running, start it in a separate terminal with `ollama serve`; do not start a second server if Ollama is already running.
+
+### 6. Launch Benthoven
+
+With the virtual environment activated and Ollama running, start the app from the project directory:
+
+```bash
+python app.py
+```
+
+Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Keep the terminal open while you use the app; press **Ctrl+C** in that terminal to stop it.
+
+To run it again later, open a terminal, change to the project directory, activate the environment with `source .venv/bin/activate`, and run `python app.py`.
+
+---
+
 ## Start the app
 
 Before launching, ensure Ollama is running and `llama3.2:3b` appears in `ollama list`. The application exits with setup instructions if the required local service or model is missing.
 
 Every time you want to use Benthoven again:
 
-1. Open PowerShell.
+1. Open PowerShell (Windows) or a terminal (Linux).
 2. Change directory to the project folder.
-3. Activate the virtual environment:
+3. Activate the virtual environment.
 
+   **Windows PowerShell**
    ```powershell
    .\.venv\Scripts\Activate.ps1
+   ```
+
+   **Linux**
+   ```bash
+   source .venv/bin/activate
    ```
 
 4. Run `python app.py`.
