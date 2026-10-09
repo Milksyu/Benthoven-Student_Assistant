@@ -128,7 +128,7 @@ The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, insta
 Run these commands from the project folder:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
