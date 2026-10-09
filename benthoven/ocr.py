@@ -61,8 +61,7 @@ def read_document(path: str) -> tuple[str, Optional[float]]:
 
         lines = [str(line).strip() for line in (getattr(result, "txts", None) or ()) if str(line).strip()]
         scores = list(getattr(result, "scores", None) or ())
-        text = "
-".join(lines)
+        text = "\n".join(lines)
         confidences = []
         for line, score in zip((str(v).strip() for v in (getattr(result, "txts", None) or ())), scores):
             if line and score is not None:
