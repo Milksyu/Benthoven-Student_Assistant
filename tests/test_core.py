@@ -137,6 +137,17 @@ def test_ics():
     assert "BEGIN:VEVENT" in ics and "DTSTART:20261009T160000" in ics and "DTEND:20261009T164500" in ics
 
 
+def test_ics_escapes_newlines_and_subject_fields():
+    ics = sessions_to_ics([dict(
+        id=2, task_name="Math\r\nBEGIN:VEVENT", subject="Science, Lab;\rInjected:yes",
+        goal="Read\\notes\r\nEND:VEVENT", start="2026-10-09T16:00", minutes=45
+    )])
+    assert "Math\\nBEGIN\\,VEVENT" not in ics  # commas are escaped, line breaks stay within one property
+    assert "SUMMARY:Math\\nBEGIN\\,VEVENT (Science\\, Lab\\;\\nInjected:yes)" in ics
+    assert "DESCRIPTION:Read\\\\notes\\nEND:VEVENT" in ics
+    assert "\r\nBEGIN:VEVENT\r\n" in ics
+
+
 def test_llm_output_is_revalidated(monkeypatch):
     """A hallucinated LLM answer must be flagged, not trusted."""
     import json
@@ -157,7 +168,8 @@ def test_llm_output_is_revalidated(monkeypatch):
     monkeypatch.setattr(extractor.requests, "post", lambda *a, **k: R())
     tasks = extractor.extract_with_ollama(doc, TODAY, "m", "http://x")
     good, ghost = tasks
-    assert good["due_date"] == "2026-10-16" and not good["flags"] or good["confidence"] >= 0.75
+    assert good["due_date"] == "2026-10-16"
+    assert good["confidence"] >= 0.75
     assert ghost["needs_review"] and ghost["confidence"] <= 0.4
     assert any("not found" in f or "does not appear" in f for f in ghost["flags"])
 
