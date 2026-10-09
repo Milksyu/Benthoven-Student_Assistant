@@ -61,35 +61,66 @@ def header_html(now: datetime, tasks: list[dict], sessions: list[dict], pending:
 
 # ----------------------------------------------------------------- tracker
 def tracker_html(now: datetime, tasks: list[dict], sessions: list[dict]) -> str:
-    if not tasks:
-        return '<div class="bv-card"><div class="bv-card-title">Tracker</div><div class="bv-empty">Confirm some tasks to start tracking progress.</div></div>'
-    total = sum(int(t["estimated_minutes"]) for t in tasks) or 1
-    done = sum(int(t["estimated_minutes"]) if t["status"] == "done" else min(int(t["minutes_done"]), int(t["estimated_minutes"])) for t in tasks)
-    pct = round(100 * done / total)
+    """Render the compact status chart and study progress for the dashboard sidebar."""
+    total = len(tasks)
+    done_count = sum(1 for t in tasks if t["status"] == "done")
+    in_progress_count = sum(
+        1 for t in tasks if t["status"] != "done" and int(t.get("minutes_done", 0) or 0) > 0
+    )
+    not_started_count = max(total - done_count - in_progress_count, 0)
+
+    done_pct = 100 * done_count / total if total else 0
+    progress_end = 100 * (done_count + in_progress_count) / total if total else 0
+    ring = (
+        f"conic-gradient(#63b692 0 {done_pct:.2f}%, "
+        f"#3298df {done_pct:.2f}% {progress_end:.2f}%, "
+        f"#dedfdd {progress_end:.2f}% 100%)"
+        if total else "conic-gradient(#dedfdd 0 100%)"
+    )
+
+    estimate = sum(max(int(t.get("estimated_minutes", 0) or 0), 0) for t in tasks) or 1
+    done_minutes = sum(
+        max(int(t.get("estimated_minutes", 0) or 0), 0) if t["status"] == "done"
+        else min(max(int(t.get("minutes_done", 0) or 0), 0), max(int(t.get("estimated_minutes", 0) or 0), 0))
+        for t in tasks
+    )
+    pct = min(100, round(100 * done_minutes / estimate))
     open_t = _open(tasks)
     overdue = [t for t in open_t if due_dt(t) < now]
     week_ago = (now - timedelta(days=7)).isoformat(timespec="minutes")
     week = sum(s["minutes_done"] for s in sessions if s["status"] in ("completed", "partial") and s["start"] >= week_ago)
+
     bars = ""
-    for t in sorted(open_t, key=due_dt)[:5]:
+    for t in sorted(open_t, key=due_dt)[:3]:
         est = max(int(t["estimated_minutes"]), 1)
         p = min(100, round(100 * int(t["minutes_done"]) / est))
-        bars += (f'<div class="bv-row"><div class="bv-rowtop"><span>{e(t["task_name"])}</span><span>{p}%</span></div>'
-                 f'<div class="bv-bar"><div style="width:{p}%"></div></div></div>')
+        bars += (
+            f'<div class="bv-row"><div class="bv-rowtop"><span>{e(t["task_name"])}</span><span>{p}%</span></div>'
+            f'<div class="bv-bar"><div style="width:{p}%"></div></div></div>'
+        )
+
     return f"""
 <div class="bv-card">
-  <div class="bv-card-title">Tracker</div>
-  <div class="bv-big">{pct}%<small> of planned work done</small></div>
+  <div class="bv-card-title">Chart</div>
+  <div class="bv-donut-wrap"><div class="bv-donut" style="background:{ring}">
+    <div class="bv-donut-center"><strong>{total}</strong><span>Total tasks</span></div>
+  </div></div>
+  <div class="bv-chart-legend">
+    <span><i class="bv-legend-dot" style="background:#dedfdd"></i>Not started <b>{not_started_count}</b></span>
+    <span><i class="bv-legend-dot" style="background:#3298df"></i>In progress <b>{in_progress_count}</b></span>
+    <span><i class="bv-legend-dot" style="background:#63b692"></i>Done <b>{done_count}</b></span>
+  </div>
+  <div class="bv-card-title">Study progress</div>
+  <div class="bv-big">{pct}%<small> of estimated work</small></div>
   <div class="bv-bar big"><div style="width:{pct}%"></div></div>
   <div class="bv-stats">
     <div><b>{len(open_t)}</b><span>open</span></div>
-    <div><b>{sum(1 for t in tasks if t['status'] == 'done')}</b><span>done</span></div>
+    <div><b>{done_count}</b><span>done</span></div>
     <div class="{'bad' if overdue else ''}"><b>{len(overdue)}</b><span>overdue</span></div>
     <div><b>{week // 60}h{week % 60:02d}</b><span>last 7 d</span></div>
   </div>
   {bars}
 </div>"""
-
 
 # ---------------------------------------------------------------- calendar
 def calendar_html(now: datetime, month_offset: int, tasks: list[dict], sessions: list[dict]) -> str:
