@@ -214,7 +214,7 @@ def test_image_ocr_uses_local_rapidocr(tmp_path, monkeypatch):
 
     text, confidence = ocr.read_document(str(image_path))
 
-    assert text == "Physics quiz on Friday\\nDue October 16"
+    assert text == "Physics quiz on Friday\nDue October 16"
     assert confidence == 80.0
 
 
