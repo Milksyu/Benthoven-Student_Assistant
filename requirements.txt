@@ -1,0 +1,5 @@
+gradio>=6,<7
+pytesseract>=0.3.10
+Pillow>=10
+requests>=2.31
+pytest>=8
