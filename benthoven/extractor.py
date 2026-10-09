@@ -243,7 +243,9 @@ def ollama_status(url: str = "http://localhost:11434", model: str = "") -> dict:
     try:
         r = requests.get(f"{url}/api/tags", timeout=2)
         names = [m["name"] for m in r.json().get("models", [])]
-        return {"running": True, "models": names, "model_ready": any(n.startswith(model) for n in names) if model else None}
+        # Ollama returns names with tags (for example, "llama3.2:3b"). Require an exact
+        # match so a similarly prefixed model cannot be reported as installed.
+        return {"running": True, "models": names, "model_ready": (model in names or f"{model}:latest" in names) if model else None}
     except Exception:
         return {"running": False, "models": [], "model_ready": False}
 
