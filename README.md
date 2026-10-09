@@ -104,7 +104,7 @@ These instructions are for Windows 10/11 using **PowerShell**. Windows 11 is rec
 
 ```powershell
 git clone <REPOSITORY-URL>
-cd Benthoven-StudentAssistant
+cd Benthoven-Student_Assistant
 ```
 
 If you do not have a Git repository URL, use the ZIP method instead.
