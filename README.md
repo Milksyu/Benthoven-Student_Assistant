@@ -124,20 +124,9 @@ The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, insta
 Run these commands from the project folder:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
-
-If you installed Python 3.12 instead, use `py -3.12 -m venv .venv` in the first command.
-
-If PowerShell blocks the activation script, you can activate it for the current terminal session with:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-This changes the policy only for the current PowerShell process. Alternatively, you can skip activation and use `.venv\Scripts\python.exe` for each Python command.
 
 ### 4. Install Python dependencies
 
