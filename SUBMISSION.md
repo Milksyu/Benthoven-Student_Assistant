@@ -6,7 +6,7 @@
 - **Project name:** Benthoven
 - **Short description:** Benthoven is an offline academic planner. It reads photos or text of assignment announcements with local OCR and a local language model, shows every extracted deadline next to its source text for the student to verify, then builds a realistic study schedule and replans when the student falls behind. Documents and schedules never leave the computer.
 - **Team members:** Alan Gabriell Asinas **[add other team members, or delete this note if solo]**
-- **Public GitHub repository:** **[https://github.com/<username>/benthoven — make sure the repo visibility is Public]**
+- **Public GitHub repository:** **[https://github.com/Milksyu/Benthoven-Student_Assistant](https://github.com/Milksyu/Benthoven-Student_Assistant)**
 
 ## The proof
 - **Demo video:** **[X / LinkedIn video URL]** (script: `DEMO_SCRIPT.md`)
