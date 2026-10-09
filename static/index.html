@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Task Manager · Benthoven</title>
+<style>
+:root{--g:#3d7a57;--ink:#37352f;--mut:#787774;--line:#e9e9e7}
+*{box-sizing:border-box}body{margin:0;background:#f7f7f5;color:var(--ink);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.page{max-width:1160px;margin:20px auto;background:#fff;border:1px solid #ececea;border-radius:8px;box-shadow:0 1px 10px rgba(15,15,15,.07);overflow:hidden;padding-bottom:40px}
+.cover{position:relative;height:200px;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px),linear-gradient(135deg,#2b2b29,#1f1f1e)}
+.cover:before{content:"";position:absolute;right:120px;top:0;width:96px;height:16px;border-radius:0 0 8px 8px;background:#e76f51}
+.seal{position:absolute;right:60px;top:56px;width:34px;height:34px;border-radius:50%;border:3px solid #d64541;box-shadow:inset 0 0 0 4px rgba(214,69,65,.25)}
+.in{padding:0 56px}.icon{width:40px;height:40px;margin-top:-30px;position:relative;display:grid;grid-template-columns:1fr 1fr;gap:3px}.icon i{background:var(--g);border-radius:2px}
+h1{font-size:32px;margin:14px 0 0;letter-spacing:-.3px}.sub{color:var(--mut);font-size:13px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.chip{background:#f1f1ef;color:#5f5e5b;padding:2px 9px;border-radius:4px;font-size:12px}
+.chip.good{background:#dbeddb;color:#1c3829}.chip.warn{background:#fdecc8;color:#402c1b}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0 14px}
+.grid{display:grid;grid-template-columns:minmax(210px,1fr) 4fr;gap:14px;align-items:stretch}
+.card{position:relative;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#fff;min-width:0}
+.card:before{content:"";position:absolute;left:12px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--g)}
+.head{margin-left:28px;padding:4px 0 8px;font-size:12px;color:#5f5e5b;border-bottom:1px solid #ededeb}
+.tabs{display:flex;gap:2px;margin-left:22px;border-bottom:1px solid #ededeb}.tabs button{all:unset;cursor:pointer;font-size:12px;color:var(--mut);padding:4px 8px 8px;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}.tabs button:hover{background:#f1f1ef}
+.chart{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:300px}
+.donut{position:relative;width:120px;height:120px}.donut svg{width:100%;height:100%}.donut div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.donut b{font-size:30px;font-weight:600;line-height:1}.donut span{font-size:10px;color:var(--mut)}
+.leg{list-style:none;margin:0;padding:0;font-size:10.5px;color:var(--mut)}.leg li{margin:3px 0}.leg i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.foot{font-size:11px;color:var(--mut);text-align:center}
+.wrap{overflow-x:auto;min-height:210px}table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #ededeb;white-space:nowrap}th{font-weight:400;font-size:12px;color:var(--mut)}
+td.n{color:var(--g);font-weight:500;text-decoration:underline;text-decoration-color:rgba(61,122,87,.35);text-underline-offset:2px}
+td.d{color:var(--g)}td.d.late{color:#c4554d}td.p{color:var(--mut);font-size:11.5px}.empty{white-space:normal;color:var(--mut);padding:18px 10px}
+.pill,select.st{display:inline-block;max-width:135px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;padding:1px 8px;border-radius:4px;font-size:12px;line-height:20px;background:#e3e2e0;color:#32302c}
+.red{background:#ffe2dd;color:#5d1715}.blue{background:#d3e5ef;color:#183347}.yellow{background:#fdecc8;color:#402c1b}.green{background:#dbeddb;color:#1c3829}
+.purple{background:#e8deee;color:#412454}.orange{background:#fadec9;color:#49290e}.pink{background:#f5e0e9;color:#4c2337}.brown{background:#eee0da;color:#32302c}
+select.st{border:0;border-radius:999px;padding:1px 6px;cursor:pointer;font-family:inherit;max-width:none}
+select.progress{background:#d3e5ef;color:#183347}select.done{background:#dbeddb;color:#1c3829}select.archived{background:#eee0da}
+.bar{display:inline-block;vertical-align:middle;width:56px;height:6px;border-radius:99px;background:#ededeb;overflow:hidden;margin-right:8px}.bar div{height:100%;background:#5fbf8f}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}.btn{font:inherit;font-size:13px;padding:5px 12px;border:1px solid #e0e0dd;border-radius:6px;background:#fff;color:var(--ink);cursor:pointer}
+.btn:hover{background:#f1f1ef}.btn.pri{background:var(--g);border-color:var(--g);color:#fff}.btn.pri:hover{background:#2f6648}.btn.sm{padding:2px 9px;font-size:12px}
+h2{font-size:16px;margin:22px 0 8px}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #ededeb}
+.row input{font:inherit;font-size:13px;padding:4px 8px;border:1px solid #e0e0dd;border-radius:6px;min-width:0}.fl{flex-basis:100%;font-size:12px;color:#8a5a00}.note{font-size:13px;color:var(--mut);margin:6px 0}.err{color:#c4554d}
+dialog{border:1px solid var(--line);border-radius:8px;padding:18px;width:min(520px,92vw);box-shadow:0 8px 30px rgba(0,0,0,.18)}dialog::backdrop{background:rgba(0,0,0,.25)}
+dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dialog input,dialog textarea{width:100%;font:inherit;padding:6px 8px;border:1px solid #e0e0dd;border-radius:6px}
+.day{font-weight:600;font-size:13px;margin:12px 0 2px}.ses{font-size:13px;padding:2px 0}
+@media(max-width:760px){.in{padding:0 16px}.grid{grid-template-columns:1fr}h1{font-size:26px}}
+</style></head><body><div class="page">
+<div class="cover"><span class="seal"></span></div>
+<div class="in">
+<div class="icon"><i></i><i></i><i></i><i></i></div>
+<h1>Task Manager</h1><div class="sub" id="sub">Benthoven Student Assistant</div><div class="chips" id="chips"></div><hr>
+<div class="grid">
+  <div class="card"><div class="head">◔ Chart</div><div class="chart" id="chart"></div></div>
+  <div class="card"><div class="tabs" id="tabs"><button data-t="all" class="on">▤ All Task</button><button data-t="done">☑ Completed</button><button data-t="arch">▣ Archive</button></div><div class="wrap" id="tbl"></div></div>
+</div>
+<div class="tools"><button class="btn pri" id="bCap">📥 Capture</button><button class="btn" id="bAdd">＋ Add task</button><button class="btn" id="bPlan">🗓️ Plan my week</button><a class="btn" id="bIcs" href="/api/ics" style="text-decoration:none">📅 Export .ics</a></div>
+<div id="msg" class="note"></div>
+<div id="pend"></div><div id="plan"></div>
+</div>
+<dialog id="dCap"><h3 style="margin:0">Capture an announcement</h3>
+ <label>Paste text</label><textarea id="cText" rows="5"></textarea>
+ <label>…or upload a screenshot / photo / .txt / .md</label><input type="file" id="cFile" accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.txt,.md">
+ <p class="note" id="cMsg"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="cX">Cancel</button><button class="btn pri" id="cGo">Extract tasks</button></div></dialog>
+<dialog id="dAdd"><h3 style="margin:0">Add a task</h3>
+ <label>Task name</label><input id="aN"><label>Subject</label><input id="aS"><label>Due date</label><input type="date" id="aD"><label>Estimated minutes</label><input type="number" id="aM" value="60" min="5">
+ <p class="note err" id="aMsg"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="aX">Cancel</button><button class="btn pri" id="aGo">Add</button></div></dialog>
+</div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(p,o={})=>{const r=await fetch(p,o),j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.statusText);return j};
+const post=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+const LAB={todo:'Not started',progress:'In progress',done:'Done',archived:'Archived'},COL=['red','blue','yellow','green','purple','orange','pink','brown'];
+const st=t=>t.status==='archived'?'archived':t.status==='done'?'done':t.minutes_done>0?'progress':'todo';
+const hash=s=>[...s.toLowerCase()].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7);
+const fmt=i=>{const d=new Date(i+'T00:00');return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})};
+let S={tasks:[],pending:[],sessions:[],today:''},tab='all',plan=null;
+function donut(c,total){const r=44,L=2*Math.PI*r;let a='',o=0;const used=c.filter(x=>x[1]);
+ if(!total)a=`<circle cx="60" cy="60" r="${r}" fill="none" stroke="#e3e2e0" stroke-width="14"/>`;
+ else used.forEach(([,n,col])=>{const s=L*n/total,g=used.length>1?3:0;a+=`<circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="14" stroke-dasharray="${Math.max(s-g,.5)} ${L}" stroke-dashoffset="${-o}" transform="rotate(-90 60 60)"/>`;o+=s});
+ return `<svg viewBox="0 0 120 120">${a}</svg>`}
+function drawChart(){const live=S.tasks.filter(t=>t.status!=='archived'),n=k=>live.filter(t=>st(t)===k).length;
+ const c=[['Not started',n('todo'),'#e3e2e0'],['In progress',n('progress'),'#2f9be9'],['Done',n('done'),'#5fbf8f']];
+ const late=live.filter(t=>t.status==='open'&&t.due_date<S.today).length;
+ $('#chart').innerHTML=`<div class="donut">${donut(c,live.length)}<div><b>${live.length}</b><span>Total</span></div></div>
+ <ul class="leg">${c.map(x=>`<li><i style="background:${x[2]}"></i>${x[0]}</li>`).join('')}</ul>
+ <div class="foot">${live.length?`${late} overdue`:'Add or capture a task to begin.'}</div>`}
+function drawTable(){const keep={all:t=>t.status!=='archived',done:t=>t.status==='done',arch:t=>t.status==='archived'}[tab];
+ const rows=S.tasks.filter(keep).map(t=>{const s=st(t),est=Math.max(t.estimated_minutes,1),d=s==='done'?est:Math.min(t.minutes_done,est),late=t.status==='open'&&t.due_date<S.today;
+  const sub=(t.subject||'').trim();
+  return `<tr><td class="n">${esc(t.task_name)}</td><td>${sub?`<span class="pill ${COL[hash(sub)%8]}" title="${esc(sub)}">${esc(sub)}</span>`:'—'}</td>
+  <td><select class="st ${s}" data-id="${t.id}">${Object.entries(LAB).map(([k,v])=>`<option value="${k}" ${k===s?'selected':''}>${v}</option>`).join('')}</select></td>
+  <td class="d ${late?'late':''}">${fmt(t.due_date)}</td><td class="p"><span class="bar"><div style="width:${Math.round(100*d/est)}%"></div></span>${d}/${est} min</td></tr>`}).join('');
+ $('#tbl').innerHTML=`<table><thead><tr><th>▤ Task Name</th><th>◎ Subject</th><th>☑ Status</th><th>▦ Deadline</th><th>✎ Progress</th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="empty">${{all:'No tasks yet. Use Capture or Add task.',done:'Nothing completed yet.',arch:'Nothing archived. Set a task\'s status to Archived.'}[tab]}</td></tr>`}</tbody></table>`}
+function drawPending(){$('#pend').innerHTML=S.pending.length?`<h2>To verify (${S.pending.length})</h2><p class="note">AI suggests, you confirm. Check each deadline before confirming.</p>`+S.pending.map(t=>`<div class="row" data-id="${t.id}">
+ <input class="pn" value="${esc(t.task_name)}" style="flex:2"><input class="ps" value="${esc(t.subject)}" style="flex:1" placeholder="Subject"><input class="pd" type="date" value="${esc(t.due_date)}">
+ <button class="btn sm pri ok">Confirm</button><button class="btn sm rm">Remove</button>${t.flags.map(f=>`<div class="fl">⚠ ${esc(f)}</div>`).join('')}${t.source_text?`<div class="fl" style="color:var(--mut)">Source: “${esc(t.source_text)}”</div>`:''}</div>`).join(''):''}
+function drawPlan(){const ss=S.sessions;if(!ss.length&&!plan){$('#plan').innerHTML='';return}
+ const by={};ss.forEach(s=>(by[s.start.slice(0,10)]??=[]).push(s));
+ $('#plan').innerHTML='<h2>Study plan</h2>'+((plan?.conflicts||[]).map(c=>`<p class="note err">⚠ ${esc(c)}</p>`).join(''))+
+ (Object.keys(by).sort().map(d=>`<div class="day">${new Date(d+'T00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>`+by[d].map(s=>`<div class="ses">${s.start.slice(11,16)} · <b>${esc(s.task_name)}</b> (${s.minutes} min) <span style="color:var(--mut)">— ${esc(s.goal)}</span></div>`).join('')).join('')||'<p class="note">No sessions fit. Check deadlines and estimates.</p>')}
+function draw(){const n=new Date();$('#sub').textContent='Benthoven Student Assistant · '+n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});drawChart();drawTable();drawPending();drawPlan()}
+async function load(){S=await api('/api/state');draw()}
+const say=(t,bad)=>{$('#msg').className='note'+(bad?' err':'');$('#msg').textContent=t};
+async function act(p,b){try{await post(p,b);await load();return true}catch(e){say(e.message,1);return false}}
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));drawTable()};
+$('#tbl').onchange=e=>{if(e.target.matches('select.st'))act('/api/task/'+e.target.dataset.id,{action:'status',state:e.target.value})};
+$('#pend').onclick=async e=>{const r=e.target.closest('.row');if(!r)return;const id=r.dataset.id;
+ if(e.target.classList.contains('rm'))return act('/api/task/'+id,{action:'delete'});
+ if(e.target.classList.contains('ok')){const ok=await act('/api/task/'+id,{action:'edit',task_name:r.querySelector('.pn').value,subject:r.querySelector('.ps').value,due_date:r.querySelector('.pd').value});
+  if(ok)act('/api/task/'+id,{action:'confirm'})}};
+$('#bCap').onclick=()=>{$('#cMsg').textContent='';$('#dCap').showModal()};$('#cX').onclick=()=>$('#dCap').close();
+$('#cGo').onclick=async()=>{const f=$('#cFile').files[0],t=$('#cText').value.trim();if(!f&&!t){$('#cMsg').textContent='Paste some text or choose a file.';return}
+ $('#cGo').disabled=true;$('#cMsg').textContent='Reading with local AI… this can take a little while.';
+ try{const r=await api(f?'/api/extract?file=1&name='+encodeURIComponent(f.name):'/api/extract',{method:'POST',body:f||t});
+  $('#dCap').close();$('#cText').value='';$('#cFile').value='';say(r.found?`${r.found} task(s) found (${r.engine}). Verify them below.`:'No deadlines found. Try Add task instead.');await load()}
+ catch(e){$('#cMsg').textContent=e.message;$('#cMsg').className='note err'}$('#cGo').disabled=false};
+$('#bAdd').onclick=()=>{$('#aMsg').textContent='';$('#dAdd').showModal()};$('#aX').onclick=()=>$('#dAdd').close();
+$('#aGo').onclick=async()=>{try{await post('/api/task',{name:$('#aN').value,subject:$('#aS').value,due:$('#aD').value,minutes:$('#aM').value});
+ $('#dAdd').close();['#aN','#aS','#aD'].forEach(s=>$(s).value='');say('Task added.');await load()}catch(e){$('#aMsg').textContent=e.message}};
+$('#bPlan').onclick=async()=>{try{plan=await post('/api/plan',{});say('Plan updated. Deadlines never move; only the schedule does.');await load()}catch(e){say(e.message,1)}};
+$('#bIcs').onclick=e=>{if(!S.sessions.length){e.preventDefault();say('Generate a plan first.',1)}};
+api('/api/status').then(s=>{$('#chips').innerHTML=`<span class="chip ${s.ai?'good':'warn'}">Local AI ${s.ai?'✅ '+esc(s.model):'⚠️ not ready'}</span><span class="chip ${s.ocr?'good':'warn'}">OCR ${s.ocr?'✅':'⚠️ not installed'}</span><span class="chip">🔒 Runs only on this computer</span>`});
+load();
+</script></body></html>

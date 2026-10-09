@@ -15,7 +15,7 @@
   - Language model: Llama 3.2 (3B by default) served by Ollama on `localhost:11434`.
   - Scheduler and priority engine: plain Python, deterministic.
   - Storage: SQLite file in `./data/`.
-  - UI: Gradio, bound to `127.0.0.1` only, with all fonts and assets bundled.
+  - UI: a single HTML page served by a standard-library Python server, bound to `127.0.0.1` only, with no external fonts or assets.
 - **What requires internet:** only one-time setup. Downloading Python packages, Tesseract, Ollama, the model weights (about 2 GB) and cloning the repo. At runtime nothing requires internet. We audited this: with the default settings the app opens **no connection to any non-loopback address**, and the browser requests only `127.0.0.1`. The single optional exception is a status indicator in Settings (off by default) that opens one empty TCP connection to `1.1.1.1:53` to show Online/Offline.
 
 ## Why does this product benefit from running AI locally?
@@ -32,7 +32,7 @@ What the local model does: reads messy, unstructured announcement text (any word
   - Llama 3.2 1B Instruct (Meta), via Ollama. Optional for weaker laptops.
   - Tesseract's English LSTM OCR model (`eng`).
   - Built with Llama.
-- **Technologies and frameworks:** Python 3.12, Gradio 6, pandas, pytesseract, Pillow, requests, SQLite (Python standard library), pytest; Tesseract OCR and Ollama as local programs.
+- **Technologies and frameworks:** Python 3.12, standard-library http.server, pytesseract, Pillow, requests, SQLite (Python standard library), pytest; Tesseract OCR and Ollama as local programs.
 - **APIs and cloud services:** none used at runtime. GitHub hosts the source code and X/LinkedIn hosts the demo video; neither is used by the app.
 - **Existing code and assets:** **[confirm]** none. All code, tests and documents in this repository were written during the hackathon. No third-party images, icons or fonts are bundled (the interface uses system emoji). The files in `sample_docs/` were written for this project.
 - **AI development tools:** Claude (Anthropic), used in the claude.ai chat interface to help design and write the code, tests and documentation. **[confirm: the team ran, tested and reviewed the result]**

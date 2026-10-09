@@ -162,41 +162,59 @@ def test_llm_output_is_revalidated(monkeypatch):
     assert any("not found" in f or "does not appear" in f for f in ghost["flags"])
 
 
-def test_panels_render():
-    from benthoven.panels import calendar_html, header_html, tracker_html, upnext_html
-    t = mk(1, "Problem <Set> 4", "2026-10-15", 90, status="open", confirmed=1)
-    sessions = [dict(id=1, task_id=1, task_name="Problem <Set> 4", start="2026-10-09T16:00", minutes=45,
-                     goal="Start it", status="planned", minutes_done=0)]
-    status = dict(ocr=True, ai=False, net=False)
-    h = header_html(NOW, [t], sessions, 2, status)
-    assert "Task Manager" in h and "Benthoven" in h and "2 to verify" in h and "&lt;Set&gt;" in h and "Offline" in h
-    assert "not ready" in h and "rules mode" not in h
-    assert "0%" in tracker_html(NOW, [t], sessions)
-    cal = calendar_html(NOW, 0, [t], sessions)
-    assert "October 2026" in cal and 'class="due"' in cal
-    assert "November 2026" in calendar_html(NOW, 1, [t], sessions)
-    assert "Start it" in upnext_html(NOW, [t], sessions)
-    assert "Confirm some tasks" in tracker_html(NOW, [], [])
+def _server():
+    import threading
+    from benthoven.web import Handler
+    from http.server import ThreadingHTTPServer
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}"
 
 
-def test_chart_and_task_table_views():
-    from benthoven.panels import task_state, tasks_table_html, tracker_html
-    todo = mk(1, "Quiz <1>", "2026-10-20", 60, status="open", confirmed=1)
-    doing = mk(2, "Essay", "2026-10-08", 90, status="open", confirmed=1, minutes_done=30)
-    done = mk(3, "Lab", "2026-10-08", 60, status="done", confirmed=1)
-    old = mk(4, "Old quiz", "2026-09-01", 60, status="archived", confirmed=1)
-    for t, subj in ((todo, "Physics"), (doing, "Physics"), (done, "Chemistry"), (old, "")):
-        t["subject"] = subj
-    tasks = [todo, doing, done, old]
-    assert [task_state(t) for t in tasks] == ["todo", "progress", "done", "archived"]
-    chart = tracker_html(NOW, tasks, [])
-    assert "<b>3</b>" in chart and "Not started" in chart and "In progress" in chart   # archived is not counted
-    allv = tasks_table_html(tasks, "all", NOW)
-    assert "Quiz &lt;1&gt;" in allv and "Old quiz" not in allv and "October 20, 2026" in allv
-    assert "In progress" in allv and "30/90 min" in allv and 'class="due late"' in allv
-    assert "Lab" in tasks_table_html(tasks, "completed", NOW) and "Essay" not in tasks_table_html(tasks, "completed", NOW)
-    assert "Old quiz" in tasks_table_html(tasks, "archive", NOW)
-    assert "Nothing archived" in tasks_table_html([todo], "archive", NOW)
+def _call(base, path, body=None):
+    import json, urllib.request, urllib.error
+    req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"{}")
+
+
+def test_web_api_task_lifecycle_and_plan():
+    srv, base = _server()
+    try:
+        assert b"Task Manager" in __import__("urllib.request").request.urlopen(base + "/").read()
+        assert _call(base, "/api/task", {"name": "", "due": ""})[0] == 400
+        assert _call(base, "/api/task", {"name": "Essay <1>", "subject": "English", "due": "2099-01-05", "minutes": 90})[0] == 200
+        tasks = _call(base, "/api/state")[1]["tasks"]
+        assert [t["task_name"] for t in tasks] == ["Essay <1>"]
+        tid = tasks[0]["id"]
+        _call(base, f"/api/task/{tid}", {"action": "status", "state": "progress"})
+        t = _call(base, "/api/state")[1]["tasks"][0]
+        assert t["status"] == "open" and 0 < t["minutes_done"] < 90
+        assert _call(base, "/api/plan", {})[0] == 200
+        assert _call(base, "/api/state")[1]["sessions"]
+        _call(base, f"/api/task/{tid}", {"action": "status", "state": "archived"})
+        assert _call(base, "/api/state")[1]["tasks"][0]["status"] == "archived"
+        assert _call(base, f"/api/task/{tid}", {"action": "bogus"})[0] == 400
+    finally:
+        srv.shutdown()
+
+
+def test_web_api_refuses_cross_site_posts():
+    import json, urllib.request, urllib.error
+    srv, base = _server()
+    try:
+        req = urllib.request.Request(base + "/api/plan", data=b"{}", headers={"Origin": "https://evil.example"})
+        try:
+            urllib.request.urlopen(req)
+            assert False, "should have been refused"
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+    finally:
+        srv.shutdown()
 
 
 def test_extract_tasks_requires_local_ollama(monkeypatch):

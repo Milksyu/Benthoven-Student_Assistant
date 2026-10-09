@@ -56,11 +56,11 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 | Progress tracking | Record progress and missed sessions, then regenerate the schedule |
 | Persistence | Local SQLite database |
 | Calendar | In-app calendar and `.ics` export |
-| Interface | Local web dashboard powered by Gradio |
+| Interface | Local Notion-style web page served by a small built-in Python server (no extra web framework) |
 
 ### The dashboard
 
-The top of the page is a Notion-style **Task Manager**: a donut chart of how many tasks are *Not started*, *In progress* and *Done*, next to a task table with **All Task**, **Completed** and **Archive** views. Status is derived from your data: a task is *In progress* once you have logged minutes on it, *Done* when it is finished, and *Archived* when you set its `status` to `archived` in **My tasks** (the status column accepts `open`, `done` or `archived`). Capture, Verify, My tasks, Plan, Progress, Settings and Privacy sit in the tab bar below, with the calendar and "Up next" card beside them. Edit tasks in **My tasks**; the table at the top is a read-only overview.
+The page is a Notion-style **Task Manager**: a donut chart of *Not started*, *In progress* and *Done* tasks next to a table with **All Task**, **Completed** and **Archive** tabs. Change a task's status with the dropdown in its row (*Archived* moves it to the Archive tab). Buttons below the table let you **Capture** an announcement (paste text or upload a screenshot), **Add** a task manually, **Plan** your week, and **Export .ics**. Captured tasks appear under **To verify**; edit the name, subject or date and press **Confirm** before they count.
 
 This is an MVP, not a guaranteed deadline-management service. It does not currently read PDFs directly, automatically sync school portals, or guarantee that every deadline will be extracted correctly.
 
@@ -107,11 +107,7 @@ These instructions are for Windows 10/11 using **PowerShell**. Windows 11 is rec
 **If you are using Git:** open PowerShell in the folder where you keep projects, then run:
 
 ```powershell
-<<<<<<< HEAD
-git clone <REPOSITORY-URL>
-=======
 git clone https://github.com/Milksyu/Benthoven-Student_Assistant.git
->>>>>>> 118648d (Update Benthoven project)
 cd Benthoven-Student_Assistant
 ```
 
@@ -132,9 +128,20 @@ The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, insta
 Run these commands from the project folder:
 
 ```powershell
-py -3.14 -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
+
+If you installed Python 3.12 instead, use `py -3.12 -m venv .venv` in the first command.
+
+If PowerShell blocks the activation script, you can activate it for the current terminal session with:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+This changes the policy only for the current PowerShell process. Alternatively, you can skip activation and use `.venv\Scripts\python.exe` for each Python command.
 
 ### 4. Install Python dependencies
 
@@ -499,7 +506,8 @@ Check the available study windows, existing commitments, estimated task duration
 
 ```text
 Benthoven-Student_Assistant-main/
-├── app.py                  # Gradio dashboard and app entry point
+├── app.py                  # Entry point (checks Ollama, starts the local server)
+├── static/index.html       # The Notion-style dashboard (HTML, CSS, JavaScript)
 ├── preflight.py            # Checks Python packages, Ollama, OCR and the sample pipeline
 ├── requirements.txt        # Python dependencies
 ├── benthoven/
@@ -508,10 +516,9 @@ Benthoven-Student_Assistant-main/
 │   ├── extractor.py        # Required local Ollama extraction + validation, self-test
 │   ├── scheduler.py        # Task ranking, session planning, plan differences
 │   ├── storage.py          # SQLite persistence and preferences
-│   ├── narrator.py         # Optional local-AI summary rewriting
 │   ├── ics.py              # Calendar (.ics) export
-│   ├── panels.py           # Cover header, donut chart, task table, calendar, cards
-│   └── style.py            # Notion-style CSS theme
+│   ├── web.py              # Local web server + JSON API
+
 ├── sample_docs/            # Sample announcement text for demos
 ├── tests/                  # Automated tests
 ├── data/                   # Created locally for the SQLite database

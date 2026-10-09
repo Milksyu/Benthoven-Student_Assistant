@@ -27,7 +27,7 @@ def line(ok: bool | None, msg: str, required: bool = True) -> None:
 
 
 print(f"Python {sys.version.split()[0]}")
-for mod in ("gradio", "pandas", "pytesseract", "PIL", "requests"):
+for mod in ("pytesseract", "PIL", "requests"):
     try:
         __import__(mod)
         line(True, f"package '{mod}' installed")
