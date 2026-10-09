@@ -197,7 +197,8 @@ def test_build_ui_constructs_dashboard():
 
     demo = app_module.build_ui()
     assert demo is not None
-    assert "Task Manager" in app_module.build_ui.__doc__ or "Task Manager" in app_module.CSS or "Task Manager" in app_module.NAV.get("tasks", "")
+    assert app_module.TASK_HEADERS[2] == "Task name"
+    assert ".bv-cover" in app_module.CSS
 
 
 def test_save_tasks_handles_missing_remove_column(monkeypatch):
