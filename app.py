@@ -532,7 +532,7 @@ NAV = {"capture": "📥 Capture", "verify": "✅ Verify", "tasks": "📋 My task
 
 # ---------------------------------------------------------------------- UI
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Benthoven", theme=gr.themes.Soft(primary_hue="green", secondary_hue="green", neutral_hue="stone")) as demo:
+    with gr.Blocks(title="Benthoven") as demo:
         cal_offset = gr.State(0)
         gr.HTML('<div class="bv-cover" aria-hidden="true"><div class="bv-cover-mark"><i></i><i></i><i></i><i></i></div></div>')
         gr.HTML('<div class="bv-page-title">Task Manager</div>')
@@ -729,5 +729,10 @@ def check_local_ai_or_exit() -> None:
 
 if __name__ == "__main__":
     check_local_ai_or_exit()
-    build_ui().launch(server_name="127.0.0.1", server_port=int(os.environ.get("PORT", 7860)),
-                      inbrowser=False, css=CSS)
+    build_ui().launch(
+        server_name="127.0.0.1",
+        server_port=int(os.environ.get("PORT", 7860)),
+        inbrowser=False,
+        css=CSS,
+        theme=gr.themes.Soft(primary_hue="green", secondary_hue="green", neutral_hue="stone"),
+    )
