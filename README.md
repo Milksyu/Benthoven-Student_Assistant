@@ -19,7 +19,7 @@
 - [Installation on Linux](#installation-on-linux)
 - [Start the app](#start-the-app)
 - [First-time walkthrough](#first-time-walkthrough)
-- [Optional local AI with Ollama](#optional-local-ai-with-ollama)
+- [Required local AI with Ollama](#required-local-ai-with-ollama)
 - [Run the tests](#run-the-tests)
 - [Privacy and offline behavior](#privacy-and-offline-behavior)
 - [Supported files](#supported-files)
@@ -49,7 +49,7 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 |---|---|
 | Assignment input | Text files, Markdown files, supported image formats, pasted text, and manual task entry |
 | Image-to-text | Local Tesseract OCR, when installed |
-| Task extraction | Rule-based extraction; optional local Ollama model |
+| Task extraction | Required local Llama model through Ollama; output is validated before review |
 | Deadline handling | Date parsing with ambiguity flags for review |
 | Task review | Confirm, edit, and remove extracted tasks in the dashboard |
 | Scheduling | Generates sessions using saved availability, commitments, workload limits, and task priorities |
@@ -80,10 +80,10 @@ You do **not** need a GPU, Docker, a database server, or a paid API key to use t
 | Python 3.11 or 3.12 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
 | Git | Only if cloning the repository | Downloads and updates the source code | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | Tesseract OCR | Only for image uploads | Converts text in screenshots/photos into text | [Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html) |
-| Ollama | No | Enables optional local language-model extraction and narration | [ollama.com/download](https://ollama.com/download) |
+| Ollama | **Yes** | Runs the required Llama model locally; no hosted AI API is used | [ollama.com/download](https://ollama.com/download) |
 | A modern web browser | Yes | Displays the local dashboard | Use your existing browser |
 
-**Minimum install:** Python + the project dependencies. You can paste announcement text or upload `.txt` / `.md` files without Tesseract. Ollama is optional; Benthoven has a rule-based extraction fallback.
+**Required install:** Python, the project dependencies, Ollama, and the configured local Llama model. Benthoven checks that Ollama and the model are available before starting. Tesseract is additionally required for image OCR; text pasted into the app does not require OCR.
 
 ---
 
@@ -162,7 +162,23 @@ tesseract --version
 
 If you only plan to paste text or use `.txt` / `.md` files, you can skip Tesseract for now.
 
-### 6. Launch Benthoven
+### 6. Install Ollama and the required Llama model
+
+1. Install Ollama from [ollama.com/download](https://ollama.com/download).
+2. Open a new PowerShell terminal and download the configured model:
+
+   ```powershell
+   ollama pull llama3.2:3b
+   ```
+3. Confirm the model is present:
+
+   ```powershell
+   ollama list
+   ```
+
+Benthoven's default model is `llama3.2:3b`. Keep the model name consistent with the app's Settings if you change it. Ollama must be running locally before Benthoven starts.
+
+### 7. Launch Benthoven
 
 ```powershell
 python app.py
@@ -218,7 +234,18 @@ tesseract --version
 
 If you do not use Homebrew, follow the [official Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html).
 
-### 5. Run the app
+### 5. Install Ollama and the required Llama model
+
+Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
+
+```bash
+ollama pull llama3.2:3b
+ollama list
+```
+
+Make sure the Ollama service is running before starting Benthoven.
+
+### 6. Run the app
 
 ```bash
 python app.py
@@ -271,7 +298,18 @@ sudo apt install -y tesseract-ocr
 tesseract --version
 ```
 
-### 5. Run the app
+### 5. Install Ollama and the required Llama model
+
+Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
+
+```bash
+ollama pull llama3.2:3b
+ollama list
+```
+
+Make sure the Ollama service is running before starting Benthoven.
+
+### 6. Run the app
 
 ```bash
 python app.py
@@ -282,6 +320,8 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Press **Ctr
 ---
 
 ## Start the app
+
+Before launching, ensure Ollama is running and `llama3.2:3b` appears in `ollama list`. The application exits with setup instructions if the required local service or model is missing.
 
 Every time you want to use Benthoven again:
 
@@ -332,21 +372,15 @@ For a predictable demo, use **Settings → Pretend today is** to set a date befo
 
 ---
 
-## Optional local AI with Ollama
+## Required local AI with Ollama
 
-Benthoven can use Ollama for local language-model-assisted extraction and narration. This is optional: without Ollama, the rule-based extractor remains available.
+Ollama and the configured Llama model are required for Benthoven. The app does not silently fall back to rule-based extraction or a cloud API when local AI is unavailable. Install Ollama and download the model before launching the app.
 
 1. Install Ollama from [ollama.com/download](https://ollama.com/download).
 2. Open a new terminal and download the default model:
 
    ```bash
    ollama pull llama3.2:3b
-   ```
-
-   If your computer has limited memory or storage, you can try the smaller model:
-
-   ```bash
-   ollama pull llama3.2:1b
    ```
 
 3. Make sure Ollama is running. On systems where it is not already running as a background service, start it with:
@@ -357,7 +391,7 @@ Benthoven can use Ollama for local language-model-assisted extraction and narrat
 
    If Ollama is already running, do not start a second server.
 
-4. Open Benthoven → **Settings** and select the appropriate extraction engine/model. The default local API address is `http://localhost:11434`.
+4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`. If you change the model in Settings, pull that exact model first and restart Benthoven.
 5. Test with a sample announcement and verify every suggested deadline before confirming it.
 
 The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements; the app's fallback does not remove the need to verify results.
@@ -390,11 +424,11 @@ Benthoven is designed to run locally:
 - Tasks, preferences, sessions, and captured text are stored in a local SQLite database. By default, the database is `data/benthoven.db` in the project directory.
 - Tesseract OCR runs on the computer.
 - The rule-based extraction path does not require a hosted AI service.
-- Ollama, when enabled with a locally downloaded model, sends requests to the local Ollama service rather than a hosted model API.
+- Ollama sends model requests to the local Ollama service rather than a hosted model API. Ollama and its configured model are required for startup.
 
 **Important:** “Local-first” does not automatically mean every operation is offline. You need internet to install dependencies and download models. The app also checks internet reachability for its privacy/status display. Do not upload sensitive school, personal, or other confidential information unless you understand and accept how your local computer and files are managed.
 
-To use the core workflow offline, install all required software first, optionally download your Ollama model, start Benthoven, and then disconnect from the internet. Text-based capture and rule-based planning should remain usable; image capture additionally requires a working Tesseract installation.
+To run Benthoven offline, first install all software and download the configured Ollama model while connected to the internet. Then ensure Ollama is running and launch Benthoven; after setup, the AI requests stay on the local machine. Image capture additionally requires a working Tesseract installation.
 
 ### Back up or reset local data
 
@@ -443,9 +477,9 @@ Run the temporary, current-terminal workaround in the Windows installation secti
 
 Run `tesseract --version`. If the command is not found, install Tesseract and add its installation folder to PATH. Restart the terminal and launch Benthoven again. You can still paste text or use `.txt` / `.md` files without OCR.
 
-### Ollama or the model is unavailable
+### Ollama or the required model is unavailable
 
-Check that Ollama is installed and running, then run `ollama list`. If the model is missing, run `ollama pull llama3.2:3b`. Confirm the model and local API address in Benthoven Settings. The rule-based extractor should still work if Ollama is unavailable.
+Check that Ollama is installed and running, then run `ollama list`. If the model is missing, run `ollama pull llama3.2:3b`. Confirm that `llama3.2:3b` appears in `ollama list`. Benthoven will not start without Ollama and the configured model; no rules-only or cloud fallback is used.
 
 ### The page does not open
 

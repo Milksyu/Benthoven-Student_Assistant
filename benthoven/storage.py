@@ -13,7 +13,7 @@ DEFAULT_PREFS: dict[str, Any] = {
     "weekend_start": "09:00", "weekend_end": "15:00",
     "focus_start": "19:00", "focus_end": "21:00",
     "session_minutes": 45, "break_minutes": 10, "max_daily_minutes": 240,
-    "energy": "normal", "engine": "auto",
+    "energy": "normal", "engine": "ollama",
     "ollama_model": "llama3.2:3b", "ollama_url": "http://localhost:11434",
     "today_override": "",
 }

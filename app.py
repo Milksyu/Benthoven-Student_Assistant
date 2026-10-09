@@ -140,7 +140,12 @@ def do_extract(files, pasted):
     last_text = ""
     for name, text, conf in sources:
         existing = db.list_tasks()
-        tasks, engine = extract_tasks(text, now.date(), prefs["engine"], prefs["ollama_model"], prefs["ollama_url"], conf, existing)
+        try:
+            tasks, engine = extract_tasks(text, now.date(), prefs["engine"], prefs["ollama_model"], prefs["ollama_url"], conf, existing)
+        except RuntimeError as exc:
+            notes.append(f"**{name}**: local AI could not process this document. {exc}")
+            last_text = text
+            continue
         doc_id = db.add_document(name, text, conf)
         db.add_pending_tasks(doc_id, tasks)
         ocr = f", OCR confidence {conf:.0f}%" if conf is not None else ""
@@ -357,7 +362,7 @@ def privacy_status() -> str:
 | Component | Status |
 |---|---|
 | Tesseract OCR (local binary) | {ok(tesseract_available())} {'installed' if tesseract_available() else 'not found: images cannot be read, but pasted text still works'} |
-| Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: using the rule-based extractor'} |
+| Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: AI features unavailable; start Ollama'} |
 | Model `{p['ollama_model']}` | {ok(bool(ol['model_ready']))} {'ready' if ol['model_ready'] else 'not pulled yet (run: ollama pull ' + p['ollama_model'] + ')'} |
 | Scheduling engine | ✅ plain Python, fully local |
 | Data location | `{db.db_path()}` |
@@ -542,7 +547,7 @@ def build_ui() -> gr.Blocks:
                         brk = gr.Number(label="Break (min)", precision=0)
                         cap = gr.Number(label="Max study per day (min)", precision=0)
                     with gr.Row():
-                        engine = gr.Dropdown(["auto", "ollama", "rules"], label="Extraction engine")
+                        engine = gr.Dropdown(["ollama"], value="ollama", label="Extraction engine (required local AI)", interactive=False)
                         model = gr.Textbox(label="Ollama model")
                         override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
                     gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
@@ -612,6 +617,26 @@ def build_ui() -> gr.Blocks:
     return demo
 
 
+def check_local_ai_or_exit() -> None:
+    """Fail fast when the required local Ollama service/model is unavailable."""
+    prefs = db.get_prefs()
+    status = ollama_status(prefs["ollama_url"], prefs["ollama_model"])
+    if not status["running"]:
+        raise SystemExit(
+            "\nBenthoven requires Ollama running locally.\n"
+            "1. Install Ollama from https://ollama.com/download\n"
+            "2. Start Ollama, then run: ollama pull " + prefs["ollama_model"] + "\n"
+            "3. Run Benthoven again with: python app.py\n"
+        )
+    if not status["model_ready"]:
+        raise SystemExit(
+            f"\nBenthoven requires the local model '{prefs['ollama_model']}'.\n"
+            f"Run: ollama pull {prefs['ollama_model']}\n"
+            "Then run Benthoven again with: python app.py\n"
+        )
+
+
 if __name__ == "__main__":
+    check_local_ai_or_exit()
     build_ui().launch(server_name="127.0.0.1", server_port=int(os.environ.get("PORT", 7860)),
                       inbrowser=False, css=CSS)

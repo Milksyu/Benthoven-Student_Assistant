@@ -1,9 +1,9 @@
 """Structured task extraction (Stage 2).
 
 Two engines share one output format:
-  * rules  - regex baseline, always available, fully offline, deterministic
-  * ollama - local LLM that proposes tasks as JSON; its output is then
-             re-validated by code (dates re-parsed, evidence checked against OCR text)
+  * ollama - required local LLM that proposes tasks as JSON; its output is then
+             re-validated by code (dates re-parsed, evidence checked against OCR text).
+Rule-based extraction is intentionally not a fallback: local AI is a project requirement.
 
 AI proposes; code validates; the student confirms.
 """
@@ -303,15 +303,13 @@ def extract_with_ollama(text: str, today: date, model: str, url: str,
 def extract_tasks(text: str, today: date, engine: str = "auto", model: str = "llama3.2:3b",
                   url: str = "http://localhost:11434", ocr_conf: Optional[float] = None,
                   existing: Optional[list[dict]] = None) -> tuple[list[dict], str]:
-    """Returns (tasks, engine_used_message). Falls back to rules if the LLM is unavailable."""
-    if engine in ("auto", "ollama"):
-        st = ollama_status(url, model)
-        if st["running"] and st["model_ready"]:
-            try:
-                return extract_with_ollama(text, today, model, url, ocr_conf, existing), f"Local LLM ({model})"
-            except Exception as e:  # network/JSON failure: degrade gracefully
-                msg = f"Local LLM failed ({type(e).__name__}); used rule-based extraction instead."
-                return extract_with_rules(text, today, ocr_conf, existing), msg
-        if engine == "ollama":
-            return extract_with_rules(text, today, ocr_conf, existing), "Ollama/model not available; used rule-based extraction."
-    return extract_with_rules(text, today, ocr_conf, existing), "Rule-based extraction (offline baseline)"
+    """Extract tasks with the required local model; never silently use a rules fallback."""
+    st = ollama_status(url, model)
+    if not st["running"]:
+        raise RuntimeError("Ollama is not running. Start Ollama and try again.")
+    if not st["model_ready"]:
+        raise RuntimeError(f"Required model '{model}' is missing. Run: ollama pull {model}")
+    try:
+        return extract_with_ollama(text, today, model, url, ocr_conf, existing), f"Local LLM ({model})"
+    except Exception as exc:
+        raise RuntimeError(f"Local model request failed ({type(exc).__name__}). Check Ollama and try again.") from exc
