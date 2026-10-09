@@ -255,3 +255,16 @@ def test_ollama_selftest(monkeypatch):
     monkeypatch.setattr(extractor.requests, "post", boom)
     r = extractor.ollama_selftest("http://x", "m")
     assert not r["ok"] and "ConnectionError" in r["error"]
+
+
+def test_find_tesseract_uses_env_var(monkeypatch, tmp_path=None):
+    import tempfile
+    from benthoven import ocr
+    exe = Path(tempfile.mkdtemp()) / "tesseract.exe"
+    exe.write_text("x")
+    monkeypatch.setattr(ocr.shutil, "which", lambda name: None)
+    monkeypatch.setattr(ocr, "_WINDOWS_DEFAULTS", ())
+    monkeypatch.setattr(ocr.os, "environ", {"TESSERACT_CMD": str(exe)})
+    assert ocr.find_tesseract() == str(exe) and ocr.tesseract_available()
+    monkeypatch.setattr(ocr.os, "environ", {})
+    assert ocr.find_tesseract() is None
