@@ -15,8 +15,6 @@
 - [System requirements](#system-requirements)
 - [What you need to install](#what-you-need-to-install)
 - [Installation on Windows](#installation-on-windows)
-- [Installation on macos](#installation-on-macos)
-- [Installation on Linux](#installation-on-linux)
 - [Start the app](#start-the-app)
 - [First-time walkthrough](#first-time-walkthrough)
 - [Required local AI with Ollama](#required-local-ai-with-ollama)
@@ -64,7 +62,7 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 
 ### Recommended setup
 
-- **Operating system:** Windows 11 is the easiest starting point for many users. macOS and mainstream Linux distributions are also supported by the Python app and its dependencies.
+- **Operating system:** Windows 10/11 (the setup guide in this README is for Windows).
 - **Python:** Python **3.11 or 3.12** is recommended for a straightforward setup. Use a 64-bit installation.
 - **Memory:** 4 GB RAM is a practical baseline for the app without local AI. More memory is recommended if you also run a local language model.
 - **Storage:** Allow at least 1 GB for the project, Python packages, and sample data. Optional AI models can require several additional gigabytes.
@@ -188,162 +186,22 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Keep the Po
 
 ---
 
-## Installation on macOS
-
-These instructions use Terminal and assume Python 3.11 or 3.12 is installed. You can download Python from [python.org](https://www.python.org/downloads/macos/) or use a package manager you already have.
-
-### 1. Open the project folder
-
-Extract the ZIP in Finder, then open Terminal and change to the extracted folder. For example, if it is in Downloads:
-
-```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
-```
-
-Adjust the path if you extracted it somewhere else.
-
-### 2. Create and activate a virtual environment
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-```
-
-If you use Python 3.12, replace `python3.11` with `python3.12`.
-
-### 3. Install dependencies
-
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 4. Install Tesseract (optional, but required for image OCR)
-
-If Homebrew is installed:
-
-```bash
-brew install tesseract
-```
-
-Check that it works:
-
-```bash
-tesseract --version
-```
-
-If you do not use Homebrew, follow the [official Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html).
-
-### 5. Install Ollama and the required Llama model
-
-Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
-
-```bash
-ollama pull llama3.2:3b
-ollama list
-```
-
-Make sure the Ollama service is running before starting Benthoven.
-
-### 6. Run the app
-
-```bash
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860). Keep Terminal open while the app is running. Press **Ctrl+C** in Terminal to stop it.
-
----
-
-## Installation on Linux
-
-The commands below are for Ubuntu or Debian-based distributions. Other distributions may use different package-manager commands.
-
-### 1. Install Python and system packages
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
-```
-
-Check your Python version:
-
-```bash
-python3 --version
-```
-
-Python 3.11 or 3.12 is recommended. If your distribution's default Python is older, install a supported version using the method recommended for that distribution.
-
-### 2. Open the project folder
-
-Extract the ZIP, then change to the extracted folder. For example:
-
-```bash
-cd ~/Downloads/Benthoven-StudentAssistant-main
-```
-
-### 3. Create the environment and install dependencies
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 4. Install Tesseract (optional, but required for image OCR)
-
-```bash
-sudo apt install -y tesseract-ocr
-tesseract --version
-```
-
-### 5. Install Ollama and the required Llama model
-
-Install Ollama from [ollama.com/download](https://ollama.com/download), then run:
-
-```bash
-ollama pull llama3.2:3b
-ollama list
-```
-
-Make sure the Ollama service is running before starting Benthoven.
-
-### 6. Run the app
-
-```bash
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Press **Ctrl+C** in the terminal to stop the app.
-
----
-
 ## Start the app
 
 Before launching, ensure Ollama is running and `llama3.2:3b` appears in `ollama list`. The application exits with setup instructions if the required local service or model is missing.
 
 Every time you want to use Benthoven again:
 
-1. Open PowerShell (Windows) or Terminal (macOS/Linux).
+1. Open PowerShell.
 2. Change directory to the project folder.
-3. Activate the virtual environment.
+3. Activate the virtual environment:
+
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+
 4. Run `python app.py`.
 5. Visit `http://127.0.0.1:7860` in your browser.
-
-Activation commands:
-
-**Windows PowerShell**
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux**
-
-```bash
-source .venv/bin/activate
-```
 
 If you see a message that the address or port is already in use, stop the other running Benthoven process first. The app reads the `PORT` environment variable if you need to choose a different port.
 
