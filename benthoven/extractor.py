@@ -12,7 +12,6 @@ from __future__ import annotations
 import difflib
 import json
 import re
-import time
 from datetime import date
 from typing import Optional
 
@@ -231,7 +230,6 @@ SCHEMA = {
             "task_name": {"type": "string"}, "subject": {"type": "string"},
             "due_date_text": {"type": "string"}, "estimated_minutes": {"type": "integer"},
             "task_type": {"type": "string", "enum": ["Assignment", "Quiz", "Exam", "Project", "Other"]},
-            "estimate_is_guess": {"type": "boolean"},
             "source_text": {"type": "string"},
         },
         "required": ["task_name", "subject", "due_date_text", "task_type", "source_text"],
@@ -257,9 +255,6 @@ def extract_with_ollama(text: str, today: date, model: str, url: str,
         "Rules: copy values from the text only. Never invent or convert dates: put the date exactly as "
         "written in due_date_text (empty string if none). source_text must be an exact sentence/line "
         "copied from the text. Skip anything that is not an assignment, quiz, exam, or project.\n"
-        "If the text states how long the work takes, copy it into estimated_minutes and set "
-        "estimate_is_guess=false. If it does not, estimate realistic minutes of work for a senior high "
-        "school or college student and set estimate_is_guess=true.\n"
         f"Today is {today.isoformat()} (for context only).\n\nTEXT:\n{text}"
     )
     r = requests.post(
@@ -295,8 +290,6 @@ def extract_with_ollama(text: str, today: date, model: str, url: str,
         if due_text and _norm(due_text) not in norm_text:
             flags.append("Date text from AI does not appear verbatim in the document.")
             conf = min(conf, 0.4)
-        if p.get("estimated_minutes") and p.get("estimate_is_guess"):
-            flags.append("Time is an AI estimate. Adjust it if you know better.")
         rec = {
             "task_name": p.get("task_name", "Untitled task"), "subject": p.get("subject", ""),
             "task_type": p.get("task_type", "Other"), "due_text": due_text or src,
@@ -307,26 +300,6 @@ def extract_with_ollama(text: str, today: date, model: str, url: str,
     return out
 
 
-def ollama_selftest(url: str = "http://localhost:11434", model: str = "llama3.2:3b") -> dict:
-    """Run one tiny inference on the local model to prove local AI works (and how fast)."""
-    st = ollama_status(url, model)
-    if not st["running"]:
-        return {"ok": False, "error": "Ollama is not running on this computer."}
-    if not st["model_ready"]:
-        return {"ok": False, "error": f"Model '{model}' is not installed. Run: ollama pull {model}"}
-    t0 = time.perf_counter()
-    try:
-        r = requests.post(f"{url}/api/chat", json={
-            "model": model, "stream": False, "options": {"temperature": 0, "num_predict": 24},
-            "messages": [{"role": "user", "content": "Reply with exactly: local inference ok"}]}, timeout=120)
-        r.raise_for_status()
-        data = r.json()
-        return {"ok": True, "seconds": round(time.perf_counter() - t0, 2),
-                "reply": data["message"]["content"].strip()[:80], "tokens": data.get("eval_count")}
-    except Exception as e:
-        return {"ok": False, "error": f"Inference failed: {type(e).__name__}: {e}"}
-
-
 def extract_tasks(text: str, today: date, engine: str = "auto", model: str = "llama3.2:3b",
                   url: str = "http://localhost:11434", ocr_conf: Optional[float] = None,
                   existing: Optional[list[dict]] = None) -> tuple[list[dict], str]:
@@ -334,15 +307,11 @@ def extract_tasks(text: str, today: date, engine: str = "auto", model: str = "ll
     if engine in ("auto", "ollama"):
         st = ollama_status(url, model)
         if st["running"] and st["model_ready"]:
-            t0 = time.perf_counter()
             try:
-                tasks = extract_with_ollama(text, today, model, url, ocr_conf, existing)
-                return tasks, f"Local AI: {model} · {time.perf_counter() - t0:.1f}s on this device"
+                return extract_with_ollama(text, today, model, url, ocr_conf, existing), f"Local LLM ({model})"
             except Exception as e:  # network/JSON failure: degrade gracefully
-                msg = f"⚠️ Local AI failed ({type(e).__name__}); the rule-based fallback was used instead."
+                msg = f"Local LLM failed ({type(e).__name__}); used rule-based extraction instead."
                 return extract_with_rules(text, today, ocr_conf, existing), msg
-        if engine != "rules":
-            return (extract_with_rules(text, today, ocr_conf, existing),
-                    "⚠️ Local AI is not available (start Ollama and run `ollama pull " + model + "`), "
-                    "so the rule-based fallback was used.")
-    return extract_with_rules(text, today, ocr_conf, existing), "Rule-based extraction (chosen in Settings)"
+        if engine == "ollama":
+            return extract_with_rules(text, today, ocr_conf, existing), "Ollama/model not available; used rule-based extraction."
+    return extract_with_rules(text, today, ocr_conf, existing), "Rule-based extraction (offline baseline)"

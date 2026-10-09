@@ -47,10 +47,8 @@ def header_html(now: datetime, tasks: list[dict], sessions: list[dict], pending:
     verify = _chip(f"📝 {pending} to verify", "warn") if pending else ""
     chips = [
         _chip("OCR ✅" if status["ocr"] else "OCR ⚠️ not installed", "good" if status["ocr"] else "warn"),
-        _chip(f"Local AI ✅ {e(status.get('model', ''))}".strip() if status["ai"] else "Local AI ⚠️ rules fallback",
-              "good" if status["ai"] else "warn"),
-        (_chip("🔒 No network calls", "good") if status["net"] is None
-         else _chip("✈️ Offline" if not status["net"] else "🌐 Online (not needed)", "good" if not status["net"] else "")),
+        _chip("Local AI ✅" if status["ai"] else "Local AI ⚠️ rules mode", "good" if status["ai"] else "warn"),
+        _chip("✈️ Offline" if not status["net"] else "🌐 Online (not needed)", "good" if not status["net"] else ""),
     ]
     return f"""
 <div class="bv-header">

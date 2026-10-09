@@ -10,7 +10,6 @@ import os
 import socket
 import tempfile
 import time
-from pathlib import Path
 from datetime import date, datetime
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")   # no telemetry
@@ -20,7 +19,7 @@ import pandas as pd
 
 from benthoven import storage as db
 from benthoven.dates import parse_due_date
-from benthoven.extractor import extract_tasks, ollama_selftest, ollama_status
+from benthoven.extractor import extract_tasks, ollama_status
 from benthoven.ics import sessions_to_ics
 from benthoven.narrator import narrate
 from benthoven.ocr import read_document, tesseract_available
@@ -303,8 +302,7 @@ def update_progress(choice, status, minutes_done, extra, finished, use_ai):
 
 # ------------------------------------------------------------- settings tab
 PREF_FIELDS = ["weekday_start", "weekday_end", "weekend_start", "weekend_end", "focus_start", "focus_end",
-               "session_minutes", "break_minutes", "max_daily_minutes", "energy", "engine", "ollama_model", "today_override",
-               "net_probe"]
+               "session_minutes", "break_minutes", "max_daily_minutes", "energy", "engine", "ollama_model", "today_override"]
 
 
 def load_prefs():
@@ -315,8 +313,6 @@ def load_prefs():
 def save_settings(*vals):
     *pref_vals, comm = vals
     new = dict(zip(PREF_FIELDS, pref_vals))
-    new["net_probe"] = bool(new["net_probe"])
-    _status_cache["t"] = 0.0   # refresh header chips with the new settings
     for k in ("session_minutes", "break_minutes", "max_daily_minutes"):
         new[k] = max(_int(new[k], db.DEFAULT_PREFS[k]), 5)
     for k in ("weekday_start", "weekday_end", "weekend_start", "weekend_end", "focus_start", "focus_end"):
@@ -356,48 +352,22 @@ def privacy_status() -> str:
     p = db.get_prefs()
     ol = ollama_status(p["ollama_url"], p["ollama_model"])
     ok = lambda b: "✅" if b else "⚠️"
-    if p.get("net_probe"):
-        net_row = ("🌐 reachable (Benthoven does not need it)" if internet_reachable()
-                   else "✈️ not reachable: offline mode, everything still works")
-        net_note = ("The live indicator is **on**: it opens one empty TCP connection to `1.1.1.1:53` (no data is sent) "
-                    "to tell whether you are online. Turn it off in Settings for zero external connections.")
-    else:
-        net_row = "🔒 not checked (live indicator is off in Settings)"
-        net_note = "Benthoven makes **no connections outside this computer**. The optional live online/offline indicator is off."
+    net = internet_reachable()
     return f"""
 | Component | Status |
 |---|---|
 | Tesseract OCR (local binary) | {ok(tesseract_available())} {'installed' if tesseract_available() else 'not found: images cannot be read, but pasted text still works'} |
-| Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: using the rule-based fallback'} |
+| Ollama server (localhost) | {ok(ol['running'])} {'running' if ol['running'] else 'not running: using the rule-based extractor'} |
 | Model `{p['ollama_model']}` | {ok(bool(ol['model_ready']))} {'ready' if ol['model_ready'] else 'not pulled yet (run: ollama pull ' + p['ollama_model'] + ')'} |
 | Scheduling engine | ✅ plain Python, fully local |
 | Data location | `{db.db_path()}` |
-| Internet check | {net_row} |
+| Internet right now | {'🌐 reachable (Benthoven does not need it)' if net else '✈️ not reachable: offline mode, everything still works'} |
 
 **What stays on this computer:** uploaded documents, OCR text, extracted tasks, schedules, and settings.
-Benthoven only talks to `localhost` (Ollama). Nothing is sent anywhere unless you press **Export .ics** (a file saved on your computer).
-{net_note}
+Benthoven only talks to `localhost`. Nothing is sent anywhere unless you press **Export .ics**.
 
-For the offline demo: install everything and pull the model first, then disconnect Wi-Fi and run the self-test below.
+For the offline demo: install everything and pull the model first, then disconnect Wi-Fi and refresh this panel.
 """
-
-
-def run_selftest() -> str:
-    p = db.get_prefs()
-    r = ollama_selftest(p["ollama_url"], p["ollama_model"])
-    if not r["ok"]:
-        return f"⚠️ **Local AI self-test failed:** {r['error']}"
-    tok = f", {r['tokens']} tokens" if r.get("tokens") else ""
-    return (f"✅ **Local AI works.** `{p['ollama_model']}` answered in **{r['seconds']} s**{tok} "
-            f"running on this computer. Reply: *{r['reply']}*")
-
-
-SAMPLE_DIR = Path(__file__).resolve().parent / "sample_docs"
-
-
-def use_samples():
-    paths = sorted(str(f) for f in SAMPLE_DIR.glob("*.txt"))
-    return do_extract(paths, "")
 
 
 # ---------------------------------------------------------- dashboard panels
@@ -411,8 +381,7 @@ def _status() -> dict:
         ol = ollama_status(p["ollama_url"], p["ollama_model"])
         _status_cache.update(t=time.time(), v={"ocr": tesseract_available(),
                                                "ai": bool(ol["running"] and ol["model_ready"]),
-                                               "model": p["ollama_model"],
-                                               "net": internet_reachable() if p.get("net_probe") else None})
+                                               "net": internet_reachable()})
     return _status_cache["v"]
 
 
@@ -495,9 +464,7 @@ def build_ui() -> gr.Blocks:
                     files = gr.File(label="Assignment photos, screenshots, or .txt/.md files", file_count="multiple",
                                     file_types=[".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".txt", ".md"])
                     pasted = gr.Textbox(label="...or paste announcement text", lines=5)
-                    with gr.Row():
-                        extract_btn = gr.Button("Extract tasks", variant="primary", scale=3)
-                        sample_btn = gr.Button("📂 Try with sample announcements", scale=2)
+                    extract_btn = gr.Button("Extract tasks", variant="primary")
                     extract_msg = gr.Markdown()
                     with gr.Accordion("Text detected in the document (OCR output, kept separate from AI results)", open=False):
                         ocr_box = gr.Textbox(lines=8, interactive=False, show_label=False)
@@ -578,7 +545,6 @@ def build_ui() -> gr.Blocks:
                         engine = gr.Dropdown(["auto", "ollama", "rules"], label="Extraction engine")
                         model = gr.Textbox(label="Ollama model")
                         override = gr.Textbox(label="Pretend today is (YYYY-MM-DD, for demos; blank = real date)")
-                    net_probe = gr.Checkbox(label="Show live online/offline indicator (makes one empty connection test to 1.1.1.1:53; off = zero external connections)")
                     gr.Markdown("**Fixed commitments** (classes, clubs, family time). Study sessions are never placed over them.")
                     comm_df = gr.Dataframe(value=commitments_df, headers=["date (YYYY-MM-DD)", "start (HH:MM)", "end (HH:MM)", "label"],
                                            interactive=True, row_count=(3, "dynamic"), show_search=False)
@@ -589,10 +555,7 @@ def build_ui() -> gr.Blocks:
                 with gr.Column(visible=False) as v_privacy:
                     gr.Markdown("### Privacy & offline status")
                     p_md = gr.Markdown(privacy_status)
-                    with gr.Row():
-                        p_btn = gr.Button("Refresh status")
-                        test_btn = gr.Button("🧪 Run local AI self-test", variant="primary")
-                    test_md = gr.Markdown()
+                    p_btn = gr.Button("Refresh status")
 
             # ---------------- right column: calendar + up next
             with gr.Column(scale=4, min_width=280):
@@ -629,11 +592,9 @@ def build_ui() -> gr.Blocks:
         after(replan_btn.click(make_plan, [use_ai], plan_outputs).then(lambda: switch("plan"), None, views + nav_list))
         ics_quick.click(export_ics, None, [ics_file]).then(lambda: switch("plan"), None, views + nav_list)
         after(s_btn.click(update_progress, [s_pick, s_status, s_min, s_extra, s_fin, use_ai], plan_outputs))
-        pref_comps = [wk_s, wk_e, we_s, we_e, f_s, f_e, sess, brk, cap, energy, engine, model, override, net_probe]
+        pref_comps = [wk_s, wk_e, we_s, we_e, f_s, f_e, sess, brk, cap, energy, engine, model, override]
         after(st_btn.click(save_settings, pref_comps + [comm_df], [st_msg, comm_df]))
         p_btn.click(privacy_status, None, [p_md])
-        test_btn.click(run_selftest, None, [test_md])
-        after(sample_btn.click(use_samples, None, [extract_msg, v_df, ocr_box]))
 
         def move_cal(offset, step):
             new = 0 if step == 0 else offset + step

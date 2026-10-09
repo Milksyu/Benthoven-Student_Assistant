@@ -15,7 +15,7 @@ DEFAULT_PREFS: dict[str, Any] = {
     "session_minutes": 45, "break_minutes": 10, "max_daily_minutes": 240,
     "energy": "normal", "engine": "auto",
     "ollama_model": "llama3.2:3b", "ollama_url": "http://localhost:11434",
-    "today_override": "", "net_probe": False,
+    "today_override": "",
 }
 
 SCHEMA = """
