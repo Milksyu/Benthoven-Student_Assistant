@@ -71,7 +71,7 @@ This is an MVP, not a guaranteed deadline-management service. It does not curren
 ### Recommended setup
 
 - **Operating system:** Windows 11 is the easiest starting point for many users. macOS and mainstream Linux distributions are also supported by the Python app and its dependencies.
-- **Python:** Python **3.11 or 3.12** is recommended for a straightforward setup. Use a 64-bit installation.
+- **Python:** Python **3.11 or 3.14** is recommended for a straightforward setup. Use a 64-bit installation.
 - **Memory:** 4 GB RAM is a practical baseline for the app without local AI. More memory is recommended if you also run a local language model.
 - **Storage:** Allow at least 1 GB for the project, Python packages, and sample data. Optional AI models can require several additional gigabytes.
 - **Browser:** A recent version of Chrome, Edge, Firefox, or Safari.
@@ -83,7 +83,7 @@ You do **not** need a GPU, Docker, a database server, or a paid API key to use t
 
 | Software | Required? | Why it is needed | Official / trusted source |
 |---|---|---|---|
-| Python 3.11 or 3.12 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
+| Python 3.11 or 3.14 | Yes | Runs Benthoven and installs its Python packages | [python.org/downloads](https://www.python.org/downloads/) |
 | Git | Only if cloning the repository | Downloads and updates the source code | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | Tesseract OCR | Only for image uploads | Converts text in screenshots/photos into text | [Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html) |
 | Ollama | **Yes** | Runs the required Llama model locally; no hosted AI API is used | [ollama.com/download](https://ollama.com/download) |
@@ -123,7 +123,7 @@ Run:
 py --version
 ```
 
-The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
+The result should show Python 3.11.x or 3.14.x. If `py` is not recognized, install Python from [python.org](https://www.python.org/downloads/) and reopen PowerShell. If you have multiple Python versions, `python --version` is another useful check.
 
 ### 3. Create a virtual environment
 
@@ -134,7 +134,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-If you installed Python 3.12 instead, use `py -3.12 -m venv .venv` in the first command.
+If you installed Python 3.14 instead, use `py -3.14 -m venv .venv` in the first command.
 
 If PowerShell blocks the activation script, you can activate it for the current terminal session with:
 
@@ -196,7 +196,7 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser. Keep the Po
 
 ## Installation on macOS
 
-These instructions use Terminal and assume Python 3.11 or 3.12 is installed. You can download Python from [python.org](https://www.python.org/downloads/macos/) or use a package manager you already have.
+These instructions use Terminal and assume Python 3.11 or 3.14 is installed. You can download Python from [python.org](https://www.python.org/downloads/macos/) or use a package manager you already have.
 
 ### 1. Open the project folder
 
@@ -215,7 +215,7 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 ```
 
-If you use Python 3.12, replace `python3.11` with `python3.12`.
+If you use Python 3.14, replace `python3.11` with `python3.14`.
 
 ### 3. Install dependencies
 
@@ -278,7 +278,7 @@ Check your Python version:
 python3 --version
 ```
 
-Python 3.11 or 3.12 is recommended. If your distribution's default Python is older, install a supported version using the method recommended for that distribution.
+Python 3.11 or 3.14 is recommended. If your distribution's default Python is older, install a supported version using the method recommended for that distribution.
 
 ### 2. Open the project folder
 
