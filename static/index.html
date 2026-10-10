@@ -57,7 +57,7 @@ dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dia
 </div>
 <dialog id="dCap"><h3 style="margin:0">Capture an announcement</h3>
  <label>Paste text</label><textarea id="cText" rows="5"></textarea>
- <label>…or upload a screenshot / photo / .txt / .md</label><input type="file" id="cFile" accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.txt,.md">
+ <label>…or upload one or more screenshots, photos, .txt or .md files (hold Ctrl or Shift to pick several)</label><input type="file" id="cFile" multiple accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.txt,.md"><div id="cList" class="note"></div>
  <p class="note" id="cMsg"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="cX">Cancel</button><button class="btn pri" id="cGo">Extract tasks</button></div></dialog>
 <dialog id="dAdd"><h3 style="margin:0">Add a task</h3>
  <label>Task name</label><input id="aN"><label>Subject</label><input id="aS"><label>Due date</label><input type="date" id="aD"><label>Estimated minutes</label><input type="number" id="aM" value="60" min="5">
@@ -107,11 +107,18 @@ $('#pend').onclick=async e=>{const r=e.target.closest('.row');if(!r)return;const
  if(e.target.classList.contains('ok')){const ok=await act('/api/task/'+id,{action:'edit',task_name:r.querySelector('.pn').value,subject:r.querySelector('.ps').value,due_date:r.querySelector('.pd').value});
   if(ok)act('/api/task/'+id,{action:'confirm'})}};
 $('#bCap').onclick=()=>{$('#cMsg').textContent='';$('#dCap').showModal()};$('#cX').onclick=()=>$('#dCap').close();
-$('#cGo').onclick=async()=>{const f=$('#cFile').files[0],t=$('#cText').value.trim();if(!f&&!t){$('#cMsg').textContent='Paste some text or choose a file.';return}
- $('#cGo').disabled=true;$('#cMsg').textContent='Reading with local AI… this can take a little while.';
- try{const r=await api(f?'/api/extract?file=1&name='+encodeURIComponent(f.name):'/api/extract',{method:'POST',body:f||t});
-  $('#dCap').close();$('#cText').value='';$('#cFile').value='';say(r.found?`${r.found} task(s) found (${r.engine}). Verify them below.`:'No deadlines found. Try Add task instead.');await load()}
- catch(e){$('#cMsg').textContent=e.message;$('#cMsg').className='note err'}$('#cGo').disabled=false};
+$('#cFile').onchange=()=>{const n=$('#cFile').files.length;$('#cList').textContent=n?n+' file'+(n>1?'s':'')+' selected: '+[...$('#cFile').files].map(f=>f.name).join(', '):''};
+$('#cGo').onclick=async()=>{const files=[...$('#cFile').files],t=$('#cText').value.trim(),m=$('#cMsg');
+ if(!files.length&&!t){m.className='note err';m.textContent='Paste some text or choose one or more files.';return}
+ const jobs=[...(t?[{name:'pasted text',body:t,file:0}]:[]),...files.map(f=>({name:f.name,body:f,file:1}))];
+ $('#cGo').disabled=true;m.className='note';let found=0,label='';const errs=[];
+ for(let i=0;i<jobs.length;i++){const j=jobs[i];m.textContent=`Reading ${i+1} of ${jobs.length}: ${j.name}… this can take a little while.`;
+  try{const r=await api('/api/extract?'+(j.file?'file=1&':'')+'name='+encodeURIComponent(j.name),{method:'POST',body:j.body});found+=r.found;label=r.engine}
+  catch(e){errs.push(j.name+': '+e.message)}}
+ $('#cGo').disabled=false;await load();
+ if(errs.length===jobs.length){m.className='note err';m.innerHTML=errs.map(esc).join('<br>');return}
+ $('#dCap').close();$('#cText').value='';$('#cFile').value='';$('#cList').textContent='';
+ say(`${found} task(s) found in ${jobs.length-errs.length} of ${jobs.length} item(s)${label?' ('+label+')':''}. Verify them below.`+(errs.length?' Problems: '+errs.join(' · '):''),errs.length>0)};
 $('#bAdd').onclick=()=>{$('#aMsg').textContent='';$('#dAdd').showModal()};$('#aX').onclick=()=>$('#dAdd').close();
 $('#aGo').onclick=async()=>{try{await post('/api/task',{name:$('#aN').value,subject:$('#aS').value,due:$('#aD').value,minutes:$('#aM').value});
  $('#dAdd').close();['#aN','#aS','#aD'].forEach(s=>$(s).value='');say('Task added.');await load()}catch(e){$('#aMsg').textContent=e.message}};
