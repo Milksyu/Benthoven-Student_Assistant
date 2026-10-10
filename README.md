@@ -38,7 +38,7 @@ Students often receive deadlines in group chats, screenshots, learning platforms
 2. **Extract** — detect possible task names, subjects, task types, estimated effort, and due dates.
 3. **Verify** — review the extracted information and correct it before treating it as a real deadline.
 4. **Plan** — create study sessions around your available hours, commitments, session length, breaks, and daily workload.
-5. **Adapt** — record completed or missed sessions and regenerate the plan to see what needs to change.
+5. **Adapt** — change a task's status (Not started, In progress, Done, Archived) and regenerate the plan; past sessions you did not finish are rescheduled before the deadline.
 6. **Export** — export scheduled sessions to an `.ics` calendar file for use with compatible calendar apps.
 
 The guiding principle is **AI can suggest; the student confirms**. Extracted deadlines should always be checked before relying on them.
@@ -52,10 +52,10 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 | Task extraction | Required local Llama model through Ollama; output is validated before review |
 | Deadline handling | Date parsing with ambiguity flags for review |
 | Task review | Confirm, edit, and remove extracted tasks in the dashboard |
-| Scheduling | Generates sessions using saved availability, commitments, workload limits, and task priorities |
-| Progress tracking | Record progress and missed sessions, then regenerate the schedule |
+| Scheduling | Generates sessions using default study hours (weekdays 16:00–21:00, weekends 09:00–15:00), 45-minute sessions, a daily limit, and task priorities |
+| Progress tracking | Set each task's status from the table, then regenerate the plan |
 | Persistence | Local SQLite database |
-| Calendar | In-app calendar and `.ics` export |
+| Calendar | `.ics` export (there is no in-app month calendar) |
 | Interface | Local Notion-style web page served by a small built-in Python server (no extra web framework) |
 
 ### The dashboard
@@ -188,7 +188,7 @@ If you only plan to paste text or use `.txt` / `.md` files, you can skip Tessera
    ollama list
    ```
 
-Benthoven's default model is `llama3.2:3b`. Keep the model name consistent with the app's Settings if you change it. Ollama must be running locally before Benthoven starts.
+Benthoven's default model is `llama3.2:3b`. Ollama must be running locally before Benthoven starts.
 
 ### 7. Launch Benthoven
 
@@ -364,13 +364,14 @@ If you see a message that the address or port is already in use, stop the other 
 ## First-time walkthrough
 
 1. **Start the app** using the instructions above.
-2. **Open Settings.** Review your weekday and weekend availability, focus window, session length, break length, daily study limit, and energy setting. Save your preferences.
-3. **Capture an announcement.** Upload a supported text/image file or paste the announcement text. You can also add a task manually.
-4. **Verify the extracted tasks.** Check the task title, subject, type, estimated effort, and especially the deadline. Relative phrases such as “next Friday” can depend on the date used for interpretation.
-5. **Confirm only correct tasks.** Edit incorrect values and remove false detections. Do not assume OCR or AI is always correct.
-6. **Generate a plan.** Review the timetable, priority explanations, and any warnings about conflicts or insufficient time.
-7. **Track progress.** Mark study sessions complete or indicate that you could not do them. Regenerate the plan when your progress or availability changes.
-8. **Export calendar sessions** if you want to import them into a calendar app that supports `.ics` files.
+2. **Capture an announcement.** Click **Capture**, paste the announcement text and/or choose one or more text or image files (hold Ctrl or Shift to select several), then click **Extract tasks**. You can also use **Add task** to enter one manually.
+3. **Verify the extracted tasks.** They appear under **To verify** with the source sentence and any warnings. Check the name, subject and especially the deadline. Relative phrases such as “next Friday” are interpreted from today's date on your computer.
+4. **Confirm only correct tasks.** Edit incorrect values and remove false detections, then press **Confirm**. Do not assume OCR or AI is always correct.
+5. **Plan.** Click **Plan my week** and review the sessions by day and any warnings about conflicts or insufficient time.
+6. **Track progress.** Change a task's status from the dropdown in the table (the chart updates). Click **Plan my week** again when things change.
+7. **Ask the study assistant.** Click the round 💬 button to get explanations, quizzes or flashcards from the local model.
+8. **Export calendar sessions** with **Export .ics** if you want to import them into a calendar app.
+9. **Finish.** Everything is saved automatically; press **Save & quit** to make a backup and stop the app.
 
 ### Try the sample announcements
 
@@ -380,7 +381,7 @@ Use the files in `sample_docs/` to test task extraction without preparing your o
 - `announcement_science.txt`
 - `announcement_chat.txt`
 
-For a predictable demo, use **Settings → Pretend today is** to set a date before the sample deadlines, then save and generate a plan. Restore the real date afterward.
+The samples use dates in October 2026. If your computer's date is later than that, the app flags those dates as past, so correct them under **To verify** before confirming.
 
 ---
 
@@ -403,7 +404,7 @@ Ollama and the configured Llama model are required for Benthoven. The app does n
 
    If Ollama is already running, do not start a second server.
 
-4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`. If you change the model in Settings, pull that exact model first and restart Benthoven.
+4. The required model defaults to `llama3.2:3b`, and the local API address defaults to `http://localhost:11434`.
 5. Test with a sample announcement and verify every suggested deadline before confirming it.
 
 The model download requires internet access and uses disk space. Local model speed depends on your CPU, memory, and GPU. A smaller model may be slower or less accurate on complex announcements, so always verify the results.
@@ -502,7 +503,7 @@ Check that Ollama is installed and running, then run `ollama list`. If the model
 
 ### Dates or tasks look wrong
 
-OCR and extraction are suggestions, not authoritative records. Check the original announcement, edit the deadline and task details, and confirm the task only after reviewing it. For relative dates, set the correct “Pretend today is” date in Settings when testing.
+OCR and extraction are suggestions, not authoritative records. Check the original announcement, edit the deadline and task details, and confirm the task only after reviewing it. Relative dates such as “next Friday” are interpreted from today's date on your computer, so check that your computer's date is correct.
 
 ### The schedule does not fit everything
 
