@@ -9,7 +9,7 @@
 - **Public GitHub repository:** **[https://github.com/Milksyu/Benthoven-Student_Assistant](https://github.com/Milksyu/Benthoven-Student_Assistant)**
 
 ## The proof
-- **Demo video:** **[X / LinkedIn video URL]** (script: `DEMO_SCRIPT.md`)
+- **Demo video:** [https://x.com/n0thing_14/status/2108732713201270812/video/1](https://x.com/n0thing_14/status/2108732713201270812/video/1)
 - **What runs locally:** everything at runtime.
   - OCR: Tesseract, run as a local program.
   - Language model: Llama 3.2 (3B by default) served by Ollama on `localhost:11434`.
@@ -34,8 +34,8 @@ What the local model does: reads messy, unstructured announcement text (any word
   - Built with Llama.
 - **Technologies and frameworks:** Python 3.12, standard-library http.server, pytesseract, Pillow, requests, SQLite (Python standard library), pytest; Tesseract OCR and Ollama as local programs.
 - **APIs and cloud services:** none used at runtime. GitHub hosts the source code and X/LinkedIn hosts the demo video; neither is used by the app.
-- **Existing code and assets:** **[confirm]** none. All code, tests and documents in this repository were written during the hackathon. No third-party images, icons or fonts are bundled (the interface uses system emoji). The files in `sample_docs/` were written for this project.
-- **AI development tools:** Claude (Anthropic), used in the claude.ai chat interface to help design and write the code, tests and documentation. **[confirm: the team ran, tested and reviewed the result]**
+- **Existing code and assets:** none. All code, tests and documents in this repository were written during the hackathon. No third-party images, icons or fonts are bundled (the interface uses system emoji). The files in `sample_docs/` were written for this project.
+- **AI development tools:** Claude (Anthropic), used in the claude.ai chat interface to help design and write the code, tests and documentation. 
 
 ## Verify our claims yourself
 ```bash
