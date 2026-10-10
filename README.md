@@ -62,6 +62,8 @@ The guiding principle is **AI can suggest; the student confirms**. Extracted dea
 
 The page is a Notion-style **Task Manager**: a donut chart of *Not started*, *In progress* and *Done* tasks next to a table with **All Task**, **Completed** and **Archive** tabs. Change a task's status with the dropdown in its row (*Archived* moves it to the Archive tab). Buttons below the table let you **Capture** an announcement (paste text or upload a screenshot), **Add** a task manually, **Plan** your week, and **Export .ics**. Captured tasks appear under **To verify**; edit the name, subject or date and press **Confirm** before they count.
 
+The round chat button in the bottom-right corner opens the **study assistant**. It uses the same local Llama model through Ollama to explain topics, quiz you, make flashcards from notes you paste, and suggest what to study first (it knows your open tasks and deadlines). It runs entirely on your computer, can make mistakes, and its chats are not saved.
+
 This is an MVP, not a guaranteed deadline-management service. It does not currently read PDFs directly, automatically sync school portals, or guarantee that every deadline will be extracted correctly.
 
 ## System requirements
@@ -128,7 +130,7 @@ The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, insta
 Run these commands from the project folder:
 
 ```powershell
-py -3.14 -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 

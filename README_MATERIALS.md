@@ -20,13 +20,15 @@ Benthoven is an offline academic planner. It reads assignment announcements (pas
 
 | Model | Made by | How it is used | License |
 |---|---|---|---|
-| Llama 3.2 3B Instruct (`llama3.2:3b`), default | Meta | Reads announcement text and proposes tasks as structured JSON. Its output is re-checked by code. | Llama 3.2 Community License |
+| Llama 3.2 3B Instruct (`llama3.2:3b`), default | Meta | Reads announcement text and proposes tasks as structured JSON (re-checked by code). Also powers the study assistant chat. | Llama 3.2 Community License |
 | Llama 3.2 1B Instruct, optional | Meta | Lighter alternative for weaker computers. | Llama 3.2 Community License |
 | Tesseract English OCR model (`eng`) | Tesseract project | Reads text from photos and screenshots. | Apache 2.0 |
 
 Built with Llama.
 
-The model only *proposes* tasks. Code re-parses every date, checks that the quoted evidence exists in the source text, flags anything doubtful, and the student confirms each task. Deadlines and study times come from a deterministic scheduler written in plain Python, never from the model.
+In the study assistant chat the same model answers the student's questions, quizzes them and makes flashcards. It is told to say when it is unsure, and the panel warns that local AI can make mistakes.
+
+In task extraction the model only *proposes* tasks. Code re-parses every date, checks that the quoted evidence exists in the source text, flags anything doubtful, and the student confirms each task. Deadlines and study times come from a deterministic scheduler written in plain Python, never from the model.
 
 ## 3. Programs installed on the computer (not bundled in the repository)
 
@@ -82,13 +84,13 @@ Tools used only while developing and testing, and not part of the app: Playwrigh
 
 - The app serves its page on `127.0.0.1` only. It cannot be reached from other computers.
 - The page loads no external fonts, scripts, images or analytics.
-- The only other connection is to Ollama on `localhost:11434`.
+- The only other connection is to Ollama on `localhost:11434`, used for task extraction and the study assistant chat.
 - Requests from other websites to the local server are refused.
 - Downloads happen only during setup: Python packages, Tesseract, Ollama, the model weights (about 2 GB), and cloning the repository.
 
 ## 8. Data stored locally
 
-Uploaded or pasted announcement text, OCR output, extracted tasks, study sessions and settings are saved in `data/benthoven.db` on the user's computer. The `data/` folder is excluded from Git (`.gitignore`) so personal data is never committed. Nothing is sent anywhere unless the user presses **Export .ics**, which downloads a calendar file to their own computer.
+Uploaded or pasted announcement text, OCR output, extracted tasks, study sessions and settings are saved in `data/benthoven.db` on the user's computer. The `data/` folder is excluded from Git (`.gitignore`) so personal data is never committed. The study assistant sees only the student's chat messages plus a short list of open tasks (name, subject, due date, estimated minutes). It never sees OCR or announcement text. Chat history lives in the browser tab only and is not saved to disk. Nothing is sent anywhere unless the user presses **Export .ics**, which downloads a calendar file to their own computer.
 
 ## 9. How to verify
 

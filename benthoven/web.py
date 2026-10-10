@@ -12,6 +12,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import requests
+
 from . import storage as db
 from .extractor import extract_tasks, ollama_status
 from .ics import sessions_to_ics
@@ -95,6 +97,39 @@ def task_action(tid: int, d: dict) -> dict:
     return {}
 
 
+SYSTEM = (
+    "You are Benthoven's study assistant, running privately on the student's own computer. Help the student learn: "
+    "explain ideas step by step in simple language with short examples, quiz them one question at a time and wait for "
+    "their answer, make flashcards or summaries from notes they paste, and help them decide what to study first. "
+    "Keep answers concise. If you are not sure about a fact, say so instead of guessing. Do not write graded "
+    "assignments for the student; guide them to do the work themselves. Reply in the language the student writes in.\n\n"
+)
+
+
+def chat_context(now: datetime, tasks: list[dict]) -> str:
+    """Compact, local-only picture of the student's workload for the assistant (no document text)."""
+    open_t = sorted((t for t in tasks if t["status"] == "open" and t["due_date"]), key=lambda t: t["due_date"])[:15]
+    head = f"Today is {now:%A, %B} {now.day}, {now.year}.\n"
+    if not open_t:
+        return head + "The student has no open tasks yet."
+    rows = "\n".join(f"- {t['task_name']} ({t['subject'] or 'no subject'}), due {t['due_date']}, "
+                      f"about {t['estimated_minutes']} min, {t['minutes_done']} min done" for t in open_t)
+    return head + "The student's open tasks, soonest first:\n" + rows
+
+
+def chat_messages(d: dict) -> list[dict]:
+    """Validate the browser's chat history and prepend the system prompt."""
+    msgs = []
+    for m in (d.get("messages") or [])[-12:]:
+        role, content = m.get("role"), str(m.get("content", ""))[:6000]
+        if role in ("user", "assistant") and content.strip():
+            msgs.append({"role": role, "content": content})
+    if not msgs or msgs[-1]["role"] != "user":
+        raise ValueError("Type a message first.")
+    context = chat_context(datetime.now(), db.list_tasks(confirmed=True))
+    return [{"role": "system", "content": SYSTEM + context}] + msgs
+
+
 def plan() -> dict:
     p, now = db.get_prefs(), datetime.now()
     iso = now.isoformat(timespec="minutes")
@@ -139,6 +174,34 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send(500, {"error": str(exc)})
 
+    def _chat(self, data: dict):
+        """Stream the local model's reply as plain text. Errors before streaming become JSON 400s."""
+        p, msgs = db.get_prefs(), chat_messages(data)
+        ol = ollama_status(p["ollama_url"], p["ollama_model"])
+        if not ol["running"]:
+            raise RuntimeError("Ollama is not running. Start Ollama and try again.")
+        if not ol["model_ready"]:
+            raise RuntimeError(f"Model '{p['ollama_model']}' is missing. Run: ollama pull {p['ollama_model']}")
+        r = requests.post(f"{p['ollama_url']}/api/chat", stream=True, timeout=(5, 300),
+                          json={"model": p["ollama_model"], "messages": msgs, "stream": True, "options": {"temperature": 0.4}})
+        r.raise_for_status()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()                    # HTTP/1.0: the stream ends when the connection closes
+        try:
+            for line in r.iter_lines():
+                piece = json.loads(line).get("message", {}).get("content", "") if line else ""
+                if piece:
+                    self.wfile.write(piece.encode())
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):   # the student pressed Stop
+            pass
+        except (requests.RequestException, ValueError):
+            self.wfile.write("\n\n[The local AI stopped unexpectedly. Please try again.]".encode())
+        finally:
+            r.close()
+
     def do_POST(self):
         u = urlparse(self.path)
         origin = self.headers.get("Origin")
@@ -155,8 +218,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, task_action(int(u.path.rsplit("/", 1)[1]), data))
             if u.path == "/api/plan":
                 return self._send(200, plan())
+            if u.path == "/api/chat":
+                return self._chat(data)
             self._send(404, {"error": "Not found."})
-        except (RuntimeError, ValueError, OSError) as exc:
+        except (RuntimeError, ValueError, OSError, requests.RequestException) as exc:
             self._send(400, {"error": str(exc)})
         except Exception as exc:
             self._send(500, {"error": f"{type(exc).__name__}: {exc}"})

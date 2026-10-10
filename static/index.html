@@ -41,6 +41,19 @@ h2{font-size:16px;margin:22px 0 8px}.row{display:flex;flex-wrap:wrap;gap:8px;ali
 dialog{border:1px solid var(--line);border-radius:8px;padding:18px;width:min(520px,92vw);box-shadow:0 8px 30px rgba(0,0,0,.18)}dialog::backdrop{background:rgba(0,0,0,.25)}
 dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dialog input,dialog textarea{width:100%;font:inherit;padding:6px 8px;border:1px solid #e0e0dd;border-radius:6px}
 .day{font-weight:600;font-size:13px;margin:12px 0 2px}.ses{font-size:13px;padding:2px 0}
+
+#fab{position:fixed;right:22px;bottom:22px;width:54px;height:54px;border-radius:50%;border:0;background:var(--g);color:#fff;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:20}
+#fab:hover{background:#2f6648}
+#chat{position:fixed;right:22px;bottom:90px;width:min(390px,calc(100vw - 24px));height:min(600px,calc(100vh - 110px));display:none;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.2);z-index:20;overflow:hidden}
+#chat.open{display:flex}.ch{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600}.ch span{flex:1}
+.ch button{all:unset;cursor:pointer;color:var(--mut);padding:2px 6px;border-radius:4px;font-size:13px}.ch button:hover{background:#f1f1ef}
+#cMsgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:88%;padding:7px 11px;border-radius:10px;font-size:13px;white-space:pre-wrap;word-wrap:break-word}
+.m.user{align-self:flex-end;background:var(--g);color:#fff}.m.bot{align-self:flex-start;background:#f1f1ef}.m.err{background:#ffe2dd;color:#5d1715}
+.m code{background:rgba(0,0,0,.08);padding:0 4px;border-radius:3px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}.chips button{font:inherit;font-size:12px;padding:3px 10px;border:1px solid #e0e0dd;border-radius:99px;background:#fff;cursor:pointer}.chips button:hover{background:#f1f1ef}
+.cin{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}.cin textarea{flex:1;font:inherit;font-size:13px;resize:none;padding:6px 8px;border:1px solid #e0e0dd;border-radius:6px;height:38px}
+.cnote{font-size:11px;color:var(--mut);text-align:center;padding:0 12px 8px}
 @media(max-width:760px){.in{padding:0 16px}.grid{grid-template-columns:1fr}h1{font-size:26px}}
 </style></head><body><div class="page">
 <div class="cover"><span class="seal"></span></div>
@@ -62,6 +75,14 @@ dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dia
 <dialog id="dAdd"><h3 style="margin:0">Add a task</h3>
  <label>Task name</label><input id="aN"><label>Subject</label><input id="aS"><label>Due date</label><input type="date" id="aD"><label>Estimated minutes</label><input type="number" id="aM" value="60" min="5">
  <p class="note err" id="aMsg"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="aX">Cancel</button><button class="btn pri" id="aGo">Add</button></div></dialog>
+</div>
+<button id="fab" title="Study assistant" aria-label="Open study assistant">💬</button>
+<div id="chat" role="dialog" aria-label="Study assistant">
+ <div class="ch"><span>💬 Study assistant</span><button id="cClear" title="Start a new chat">New chat</button><button id="cClose" aria-label="Close">✕</button></div>
+ <div id="cMsgs"></div>
+ <div class="chips" id="chips"></div>
+ <div class="cin"><textarea id="cIn" placeholder="Ask anything about what you're studying…"></textarea><button class="btn pri" id="cSend">Send</button></div>
+ <div class="cnote">Runs on your computer. Local AI can make mistakes, so double-check important facts. Chats are not saved.</div>
 </div>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -124,6 +145,29 @@ $('#aGo').onclick=async()=>{try{await post('/api/task',{name:$('#aN').value,subj
  $('#dAdd').close();['#aN','#aS','#aD'].forEach(s=>$(s).value='');say('Task added.');await load()}catch(e){$('#aMsg').textContent=e.message}};
 $('#bPlan').onclick=async()=>{try{plan=await post('/api/plan',{});say('Plan updated. Deadlines never move; only the schedule does.');await load()}catch(e){say(e.message,1)}};
 $('#bIcs').onclick=e=>{if(!S.sessions.length){e.preventDefault();say('Generate a plan first.',1)}};
+
+/* ---- study assistant (local Ollama, streamed) ---- */
+let chat=[],busy=false,ctl=null;
+const md=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/^[-*] /gm,'• ');
+const bubble=(role,text)=>{const d=document.createElement('div');d.className='m '+role;d.innerHTML=md(text);$('#cMsgs').appendChild(d);$('#cMsgs').scrollTop=1e9;return d};
+const CHIPS=[['What should I study first?',1],['Quiz me on…','Quiz me on '],['Explain simply…','Explain in simple terms: '],['Make flashcards…','Make flashcards from these notes:\n']];
+function drawChips(){$('#chips').innerHTML=chat.length?'':CHIPS.map((c,i)=>`<button data-i="${i}">${esc(c[0])}</button>`).join('')}
+function resetChat(){if(busy&&ctl)ctl.abort();chat=[];$('#cMsgs').innerHTML='';bubble('bot','Hi! I can explain topics, quiz you, make flashcards from your notes, or help you decide what to study first.');drawChips()}
+async function send(text){text=text.trim();if(busy||!text)return;
+ chat.push({role:'user',content:text});bubble('user',text);$('#cIn').value='';drawChips();
+ const out=bubble('bot','…');let acc='',failed=false;busy=true;$('#cSend').textContent='Stop';ctl=new AbortController();
+ try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chat}),signal:ctl.signal});
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||r.statusText)}
+  const rd=r.body.getReader(),dec=new TextDecoder();
+  for(;;){const {done,value}=await rd.read();if(done)break;acc+=dec.decode(value,{stream:true});out.innerHTML=md(acc);$('#cMsgs').scrollTop=1e9}}
+ catch(e){if(e.name==='AbortError'){acc+=acc?' …(stopped)':'';out.innerHTML=md(acc||'(stopped)')}else{failed=true;out.classList.add('err');out.textContent=e.message}}
+ finally{busy=false;ctl=null;$('#cSend').textContent='Send'}
+ if(failed||!acc)chat.pop();else chat.push({role:'assistant',content:acc})}
+$('#fab').onclick=()=>{$('#chat').classList.toggle('open');if($('#chat').classList.contains('open')){if(!chat.length&&!$('#cMsgs').children.length)resetChat();$('#cIn').focus()}};
+$('#cClose').onclick=()=>$('#chat').classList.remove('open');$('#cClear').onclick=resetChat;
+$('#cSend').onclick=()=>busy?ctl&&ctl.abort():send($('#cIn').value);
+$('#cIn').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!busy)send($('#cIn').value)}};
+$('#chips').onclick=e=>{const b=e.target.closest('button');if(!b)return;const c=CHIPS[b.dataset.i];if(c[1]===1)send(c[0]);else{$('#cIn').value=c[1];$('#cIn').focus()}};
 api('/api/status').then(s=>{$('#chips').innerHTML=`<span class="chip ${s.ai?'good':'warn'}">Local AI ${s.ai?'✅ '+esc(s.model):'⚠️ not ready'}</span><span class="chip ${s.ocr?'good':'warn'}">OCR ${s.ocr?'✅':'⚠️ not installed'}</span><span class="chip">🔒 Runs only on this computer</span>`});
 load();
 </script></body></html>
