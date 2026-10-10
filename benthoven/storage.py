@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions(
 CREATE TABLE IF NOT EXISTS commitments(
   id INTEGER PRIMARY KEY, date TEXT, start TEXT, end TEXT, label TEXT);
 CREATE TABLE IF NOT EXISTS prefs(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY, role TEXT, content TEXT, created_at TEXT);
 """
 
 
@@ -171,3 +172,50 @@ def mark_past_planned_unfinished(now_iso: str) -> int:
 def update_session(session_id: int, status: str, minutes_done: int) -> None:
     with connect() as con:
         con.execute("UPDATE sessions SET status=?, minutes_done=? WHERE id=?", (status, minutes_done, session_id))
+
+
+# ------------------------------------------------------------ study chat
+CHAT_KEEP = 200
+
+
+def add_chat(role: str, content: str) -> int:
+    with connect() as con:
+        cur = con.execute("INSERT INTO chat(role,content,created_at) VALUES(?,?,?)",
+                          (role, content, datetime.now().isoformat(timespec="seconds")))
+        con.execute("DELETE FROM chat WHERE id <= ?", (cur.lastrowid - CHAT_KEEP,))
+        return cur.lastrowid
+
+
+def list_chat() -> list[dict]:
+    with connect() as con:
+        return _rows(con.execute("SELECT role, content FROM chat ORDER BY id"))
+
+
+def delete_chat(chat_id: int) -> None:
+    with connect() as con:
+        con.execute("DELETE FROM chat WHERE id=?", (chat_id,))
+
+
+def clear_chat() -> None:
+    with connect() as con:
+        con.execute("DELETE FROM chat")
+
+
+# --------------------------------------------------------------- backups
+def backup_db(keep: int = 5) -> Optional[Path]:
+    """Copy the whole database to data/backups/ (SQLite's online backup API) and keep the newest few."""
+    src = db_path()
+    if not src.exists():
+        return None
+    folder = src.parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"{src.stem}-{datetime.now():%Y%m%d-%H%M%S-%f}.db"
+    a, b = sqlite3.connect(src), sqlite3.connect(dest)
+    try:
+        a.backup(b)
+    finally:
+        b.close()
+        a.close()
+    for old in sorted(folder.glob(f"{src.stem}-*.db"))[:-keep]:
+        old.unlink(missing_ok=True)
+    return dest

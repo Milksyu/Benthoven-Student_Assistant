@@ -323,3 +323,74 @@ def test_chat_endpoint_streams_and_refuses_without_ollama(monkeypatch):
             assert e.code == 400 and "not running" in json.loads(e.read())["error"]
     finally:
         srv.shutdown()
+
+
+def test_chat_history_and_backups_are_saved_to_disk():
+    import sqlite3
+    from benthoven import storage
+    storage.clear_chat()
+    storage.add_chat("user", "What is mitosis?")
+    storage.add_chat("assistant", "Cell division.")
+    assert storage.list_chat() == [{"role": "user", "content": "What is mitosis?"}, {"role": "assistant", "content": "Cell division."}]
+    for i in range(storage.CHAT_KEEP + 5):
+        storage.add_chat("user", f"m{i}")
+    assert len(storage.list_chat()) == storage.CHAT_KEEP                 # old messages pruned
+    for _ in range(7):
+        dest = storage.backup_db(keep=3)
+    backups = sorted(dest.parent.glob("*.db"))
+    assert len(backups) == 3 and dest in backups
+    con = sqlite3.connect(dest)
+    assert con.execute("SELECT COUNT(*) FROM chat").fetchone()[0] == storage.CHAT_KEEP   # a real, complete copy
+    con.close()
+    storage.clear_chat()
+    assert storage.list_chat() == []
+
+
+def test_chat_replies_are_saved_even_when_cut_short_and_failed_ones_are_not(monkeypatch):
+    import json, urllib.request, urllib.error
+    from benthoven import storage, web
+    storage.clear_chat()
+
+    class Fake:
+        def raise_for_status(self): pass
+        def close(self): pass
+        def iter_lines(self):
+            for w in ("Cells ", "divide."):
+                yield json.dumps({"message": {"content": w}}).encode()
+
+    class Empty(Fake):
+        def iter_lines(self):
+            return iter(())
+
+    monkeypatch.setattr(web, "ollama_status", lambda url, model: {"running": True, "models": [], "model_ready": True})
+    srv, base = _server()
+
+    def ask(text):
+        req = urllib.request.Request(base + "/api/chat", data=json.dumps({"messages": [{"role": "user", "content": text}]}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        return urllib.request.urlopen(req).read().decode()
+
+    try:
+        monkeypatch.setattr(web.requests, "post", lambda *a, **k: Fake())
+        assert ask("What is mitosis?") == "Cells divide."
+        assert storage.list_chat() == [{"role": "user", "content": "What is mitosis?"}, {"role": "assistant", "content": "Cells divide."}]
+        assert _call(base, "/api/chat/history")[1]["messages"][-1]["content"] == "Cells divide."
+        monkeypatch.setattr(web.requests, "post", lambda *a, **k: Empty())
+        ask("this gets no answer")                                         # nothing generated: question is not kept
+        assert len(storage.list_chat()) == 2
+        assert _call(base, "/api/chat/clear", {})[0] == 200 and storage.list_chat() == []
+    finally:
+        srv.shutdown()
+
+
+def test_shutdown_endpoint_stops_the_server():
+    import threading
+    from benthoven.web import Handler
+    from http.server import ThreadingHTTPServer
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    th = threading.Thread(target=srv.serve_forever)
+    th.start()
+    assert _call(f"http://127.0.0.1:{srv.server_address[1]}", "/api/shutdown", {})[0] == 200
+    th.join(timeout=5)
+    assert not th.is_alive()
+    srv.server_close()

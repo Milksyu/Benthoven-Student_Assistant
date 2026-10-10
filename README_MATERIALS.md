@@ -90,7 +90,7 @@ Tools used only while developing and testing, and not part of the app: Playwrigh
 
 ## 8. Data stored locally
 
-Uploaded or pasted announcement text, OCR output, extracted tasks, study sessions and settings are saved in `data/benthoven.db` on the user's computer. The `data/` folder is excluded from Git (`.gitignore`) so personal data is never committed. The study assistant sees only the student's chat messages plus a short list of open tasks (name, subject, due date, estimated minutes). It never sees OCR or announcement text. Chat history lives in the browser tab only and is not saved to disk. Nothing is sent anywhere unless the user presses **Export .ics**, which downloads a calendar file to their own computer.
+Uploaded or pasted announcement text, OCR output, extracted tasks, study sessions, the study-assistant chat history and settings are saved in `data/benthoven.db` on the user's computer. The `data/` folder (including `data/backups/`) is excluded from Git (`.gitignore`) so personal data is never committed. The study assistant sees only the student's chat messages plus a short list of open tasks (name, subject, due date, estimated minutes). It never sees OCR or announcement text. The chat history is saved in the same local database so it is still there after closing the app, and the student can delete it with **New chat**. The browser also remembers unsent drafts, the selected tab and whether the chat panel is open, using its `localStorage` on `127.0.0.1`. Each time the app starts and stops it copies the database to `data/backups/` (newest 5 kept). Nothing is sent anywhere unless the user presses **Export .ics**, which downloads a calendar file to their own computer.
 
 ## 9. How to verify
 

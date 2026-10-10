@@ -64,7 +64,7 @@ dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dia
   <div class="card"><div class="head">◔ Chart</div><div class="chart" id="chart"></div></div>
   <div class="card"><div class="tabs" id="tabs"><button data-t="all" class="on">▤ All Task</button><button data-t="done">☑ Completed</button><button data-t="arch">▣ Archive</button></div><div class="wrap" id="tbl"></div></div>
 </div>
-<div class="tools"><button class="btn pri" id="bCap">📥 Capture</button><button class="btn" id="bAdd">＋ Add task</button><button class="btn" id="bPlan">🗓️ Plan my week</button><a class="btn" id="bIcs" href="/api/ics" style="text-decoration:none">📅 Export .ics</a></div>
+<div class="tools"><button class="btn pri" id="bCap">📥 Capture</button><button class="btn" id="bAdd">＋ Add task</button><button class="btn" id="bPlan">🗓️ Plan my week</button><a class="btn" id="bIcs" href="/api/ics" style="text-decoration:none">📅 Export .ics</a><button class="btn" id="bQuit" style="margin-left:auto" title="Make a backup copy and stop the app">⏻ Save &amp; quit</button></div>
 <div id="msg" class="note"></div>
 <div id="pend"></div><div id="plan"></div>
 </div>
@@ -78,11 +78,11 @@ dialog label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}dia
 </div>
 <button id="fab" title="Study assistant" aria-label="Open study assistant">💬</button>
 <div id="chat" role="dialog" aria-label="Study assistant">
- <div class="ch"><span>💬 Study assistant</span><button id="cClear" title="Start a new chat">New chat</button><button id="cClose" aria-label="Close">✕</button></div>
+ <div class="ch"><span>💬 Study assistant</span><button id="cClear" title="Delete this saved chat and start a new one">New chat</button><button id="cClose" aria-label="Close">✕</button></div>
  <div id="cMsgs"></div>
- <div class="chips" id="chips"></div>
- <div class="cin"><textarea id="cIn" placeholder="Ask anything about what you're studying…"></textarea><button class="btn pri" id="cSend">Send</button></div>
- <div class="cnote">Runs on your computer. Local AI can make mistakes, so double-check important facts. Chats are not saved.</div>
+ <div class="chips" id="qp"></div>
+ <div class="cin"><textarea id="cIn" placeholder="Ask about what you're studying…"></textarea><button class="btn pri" id="cSend">Send</button></div>
+ <div class="cnote">Runs on your computer. Local AI can make mistakes, so double-check important facts. Chats are saved only on this computer.</div>
 </div>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -92,6 +92,8 @@ const LAB={todo:'Not started',progress:'In progress',done:'Done',archived:'Archi
 const st=t=>t.status==='archived'?'archived':t.status==='done'?'done':t.minutes_done>0?'progress':'todo';
 const hash=s=>[...s.toLowerCase()].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7);
 const fmt=i=>{const d=new Date(i+'T00:00');return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})};
+const UI={get(){try{return JSON.parse(localStorage.getItem('bv.ui')||'{}')}catch(e){return{}}},set(p){try{localStorage.setItem('bv.ui',JSON.stringify({...UI.get(),...p}))}catch(e){}}};
+const flash=()=>{const e=$('#sv');if(e)e.textContent='💾 Saved at '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
 let S={tasks:[],pending:[],sessions:[],today:''},tab='all',plan=null;
 function donut(c,total){const r=44,L=2*Math.PI*r;let a='',o=0;const used=c.filter(x=>x[1]);
  if(!total)a=`<circle cx="60" cy="60" r="${r}" fill="none" stroke="#e3e2e0" stroke-width="14"/>`;
@@ -120,13 +122,15 @@ function drawPlan(){const ss=S.sessions;if(!ss.length&&!plan){$('#plan').innerHT
 function draw(){const n=new Date();$('#sub').textContent='Benthoven Student Assistant · '+n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});drawChart();drawTable();drawPending();drawPlan()}
 async function load(){S=await api('/api/state');draw()}
 const say=(t,bad)=>{$('#msg').className='note'+(bad?' err':'');$('#msg').textContent=t};
-async function act(p,b){try{await post(p,b);await load();return true}catch(e){say(e.message,1);return false}}
-$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));drawTable()};
+async function act(p,b){try{await post(p,b);await load();flash();return true}catch(e){say(e.message,1);return false}}
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;tab=b.dataset.t;UI.set({tab});document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));drawTable()};
 $('#tbl').onchange=e=>{if(e.target.matches('select.st'))act('/api/task/'+e.target.dataset.id,{action:'status',state:e.target.value})};
 $('#pend').onclick=async e=>{const r=e.target.closest('.row');if(!r)return;const id=r.dataset.id;
  if(e.target.classList.contains('rm'))return act('/api/task/'+id,{action:'delete'});
  if(e.target.classList.contains('ok')){const ok=await act('/api/task/'+id,{action:'edit',task_name:r.querySelector('.pn').value,subject:r.querySelector('.ps').value,due_date:r.querySelector('.pd').value});
   if(ok)act('/api/task/'+id,{action:'confirm'})}};
+$('#pend').onchange=async e=>{const r=e.target.closest('.row');if(!r||!e.target.matches('input'))return;
+ try{await post('/api/task/'+r.dataset.id,{action:'edit',task_name:r.querySelector('.pn').value,subject:r.querySelector('.ps').value,due_date:r.querySelector('.pd').value});flash()}catch(err){say(err.message,1)}};
 $('#bCap').onclick=()=>{$('#cMsg').textContent='';$('#dCap').showModal()};$('#cX').onclick=()=>$('#dCap').close();
 $('#cFile').onchange=()=>{const n=$('#cFile').files.length;$('#cList').textContent=n?n+' file'+(n>1?'s':'')+' selected: '+[...$('#cFile').files].map(f=>f.name).join(', '):''};
 $('#cGo').onclick=async()=>{const files=[...$('#cFile').files],t=$('#cText').value.trim(),m=$('#cMsg');
@@ -138,23 +142,25 @@ $('#cGo').onclick=async()=>{const files=[...$('#cFile').files],t=$('#cText').val
   catch(e){errs.push(j.name+': '+e.message)}}
  $('#cGo').disabled=false;await load();
  if(errs.length===jobs.length){m.className='note err';m.innerHTML=errs.map(esc).join('<br>');return}
- $('#dCap').close();$('#cText').value='';$('#cFile').value='';$('#cList').textContent='';
+ $('#dCap').close();$('#cText').value='';UI.set({cap:''});$('#cFile').value='';$('#cList').textContent='';flash();
  say(`${found} task(s) found in ${jobs.length-errs.length} of ${jobs.length} item(s)${label?' ('+label+')':''}. Verify them below.`+(errs.length?' Problems: '+errs.join(' · '):''),errs.length>0)};
 $('#bAdd').onclick=()=>{$('#aMsg').textContent='';$('#dAdd').showModal()};$('#aX').onclick=()=>$('#dAdd').close();
 $('#aGo').onclick=async()=>{try{await post('/api/task',{name:$('#aN').value,subject:$('#aS').value,due:$('#aD').value,minutes:$('#aM').value});
- $('#dAdd').close();['#aN','#aS','#aD'].forEach(s=>$(s).value='');say('Task added.');await load()}catch(e){$('#aMsg').textContent=e.message}};
-$('#bPlan').onclick=async()=>{try{plan=await post('/api/plan',{});say('Plan updated. Deadlines never move; only the schedule does.');await load()}catch(e){say(e.message,1)}};
+ $('#dAdd').close();['#aN','#aS','#aD'].forEach(s=>$(s).value='');UI.set({add:null});say('Task added.');await load();flash()}catch(e){$('#aMsg').textContent=e.message}};
+$('#bPlan').onclick=async()=>{try{plan=await post('/api/plan',{});say('Plan updated. Deadlines never move; only the schedule does.');await load();flash()}catch(e){say(e.message,1)}};
 $('#bIcs').onclick=e=>{if(!S.sessions.length){e.preventDefault();say('Generate a plan first.',1)}};
 
-/* ---- study assistant (local Ollama, streamed) ---- */
+/* ---- study assistant (local Ollama, streamed, history saved in the local database) ---- */
 let chat=[],busy=false,ctl=null;
 const md=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/^[-*] /gm,'• ');
 const bubble=(role,text)=>{const d=document.createElement('div');d.className='m '+role;d.innerHTML=md(text);$('#cMsgs').appendChild(d);$('#cMsgs').scrollTop=1e9;return d};
 const CHIPS=[['What should I study first?',1],['Quiz me on…','Quiz me on '],['Explain simply…','Explain in simple terms: '],['Make flashcards…','Make flashcards from these notes:\n']];
-function drawChips(){$('#chips').innerHTML=chat.length?'':CHIPS.map((c,i)=>`<button data-i="${i}">${esc(c[0])}</button>`).join('')}
-function resetChat(){if(busy&&ctl)ctl.abort();chat=[];$('#cMsgs').innerHTML='';bubble('bot','Hi! I can explain topics, quiz you, make flashcards from your notes, or help you decide what to study first.');drawChips()}
+function drawChips(){$('#qp').innerHTML=chat.length?'':CHIPS.map((c,i)=>`<button data-i="${i}">${esc(c[0])}</button>`).join('')}
+function renderChat(){$('#cMsgs').innerHTML='';bubble('bot','Hi! I can explain topics, quiz you, make flashcards from your notes, or help you decide what to study first.');chat.forEach(m=>bubble(m.role==='user'?'user':'bot',m.content));drawChips()}
+async function newChat(){if(chat.length&&!confirm('Delete this saved conversation and start a new one?'))return;if(busy&&ctl)ctl.abort();
+ try{await post('/api/chat/clear',{})}catch(e){}chat=[];renderChat()}
 async function send(text){text=text.trim();if(busy||!text)return;
- chat.push({role:'user',content:text});bubble('user',text);$('#cIn').value='';drawChips();
+ chat.push({role:'user',content:text});bubble('user',text);$('#cIn').value='';UI.set({draft:''});drawChips();
  const out=bubble('bot','…');let acc='',failed=false;busy=true;$('#cSend').textContent='Stop';ctl=new AbortController();
  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chat}),signal:ctl.signal});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||r.statusText)}
@@ -162,12 +168,25 @@ async function send(text){text=text.trim();if(busy||!text)return;
   for(;;){const {done,value}=await rd.read();if(done)break;acc+=dec.decode(value,{stream:true});out.innerHTML=md(acc);$('#cMsgs').scrollTop=1e9}}
  catch(e){if(e.name==='AbortError'){acc+=acc?' …(stopped)':'';out.innerHTML=md(acc||'(stopped)')}else{failed=true;out.classList.add('err');out.textContent=e.message}}
  finally{busy=false;ctl=null;$('#cSend').textContent='Send'}
- if(failed||!acc)chat.pop();else chat.push({role:'assistant',content:acc})}
-$('#fab').onclick=()=>{$('#chat').classList.toggle('open');if($('#chat').classList.contains('open')){if(!chat.length&&!$('#cMsgs').children.length)resetChat();$('#cIn').focus()}};
-$('#cClose').onclick=()=>$('#chat').classList.remove('open');$('#cClear').onclick=resetChat;
+ if(failed||!acc)chat.pop();else{chat.push({role:'assistant',content:acc});flash()}}
+$('#fab').onclick=()=>{const o=$('#chat').classList.toggle('open');UI.set({chatOpen:o});if(o)$('#cIn').focus()};
+$('#cClose').onclick=()=>{$('#chat').classList.remove('open');UI.set({chatOpen:false})};$('#cClear').onclick=newChat;
 $('#cSend').onclick=()=>busy?ctl&&ctl.abort():send($('#cIn').value);
 $('#cIn').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!busy)send($('#cIn').value)}};
-$('#chips').onclick=e=>{const b=e.target.closest('button');if(!b)return;const c=CHIPS[b.dataset.i];if(c[1]===1)send(c[0]);else{$('#cIn').value=c[1];$('#cIn').focus()}};
-api('/api/status').then(s=>{$('#chips').innerHTML=`<span class="chip ${s.ai?'good':'warn'}">Local AI ${s.ai?'✅ '+esc(s.model):'⚠️ not ready'}</span><span class="chip ${s.ocr?'good':'warn'}">OCR ${s.ocr?'✅':'⚠️ not installed'}</span><span class="chip">🔒 Runs only on this computer</span>`});
+$('#qp').onclick=e=>{const b=e.target.closest('button');if(!b)return;const c=CHIPS[b.dataset.i];if(c[1]===1)send(c[0]);else{$('#cIn').value=c[1];UI.set({draft:c[1]});$('#cIn').focus()}};
+/* ---- remember unfinished typing ---- */
+$('#cIn').addEventListener('input',()=>UI.set({draft:$('#cIn').value}));
+$('#cText').addEventListener('input',()=>UI.set({cap:$('#cText').value}));
+['#aN','#aS','#aD','#aM'].forEach(q=>$(q).addEventListener('input',()=>UI.set({add:{n:$('#aN').value,s:$('#aS').value,d:$('#aD').value,m:$('#aM').value}})));
+/* ---- save & quit ---- */
+$('#bQuit').onclick=async()=>{if(!confirm('Save and close Benthoven?\n\nYour tasks, plan and chats are already saved. A backup copy will be made, then the app stops.'))return;
+ try{await post('/api/shutdown',{})}catch(e){}
+ document.body.innerHTML='<div style="max-width:460px;margin:18vh auto;text-align:center;font:16px system-ui,sans-serif;color:#37352f"><h2>✅ Progress saved</h2><p>Benthoven has stopped. You can close this tab.<br>Run <code>python app.py</code> to open it again.</p></div>'};
+api('/api/status').then(s=>{$('#chips').innerHTML=`<span class="chip ${s.ai?'good':'warn'}">Local AI ${s.ai?'✅ '+esc(s.model):'⚠️ not ready'}</span><span class="chip ${s.ocr?'good':'warn'}">OCR ${s.ocr?'✅':'⚠️ not installed'}</span><span class="chip">🔒 Runs only on this computer</span><span class="chip good" id="sv">💾 Auto-saved on this computer</span>`});
+{const u=UI.get();tab=u.tab||'all';document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===tab));
+ if(u.cap)$('#cText').value=u.cap;if(u.draft)$('#cIn').value=u.draft;
+ if(u.add){$('#aN').value=u.add.n||'';$('#aS').value=u.add.s||'';$('#aD').value=u.add.d||'';$('#aM').value=u.add.m||'60'}
+ if(u.chatOpen)$('#chat').classList.add('open')}
+api('/api/chat/history').then(h=>{chat=h.messages||[];renderChat()}).catch(()=>renderChat());
 load();
 </script></body></html>

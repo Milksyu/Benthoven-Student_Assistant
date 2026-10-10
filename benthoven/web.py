@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -164,6 +165,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, state())
             if path == "/api/status":
                 return self._send(200, status())
+            if path == "/api/chat/history":
+                return self._send(200, {"messages": db.list_chat()})
             if path == "/api/ics":
                 sessions = db.list_sessions("planned")
                 if not sessions:
@@ -185,6 +188,7 @@ class Handler(BaseHTTPRequestHandler):
         r = requests.post(f"{p['ollama_url']}/api/chat", stream=True, timeout=(5, 300),
                           json={"model": p["ollama_model"], "messages": msgs, "stream": True, "options": {"temperature": 0.4}})
         r.raise_for_status()
+        uid, parts = db.add_chat("user", msgs[-1]["content"]), []     # saved as soon as the model accepts it
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -193,14 +197,20 @@ class Handler(BaseHTTPRequestHandler):
             for line in r.iter_lines():
                 piece = json.loads(line).get("message", {}).get("content", "") if line else ""
                 if piece:
+                    parts.append(piece)
                     self.wfile.write(piece.encode())
                     self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):   # the student pressed Stop
+        except (BrokenPipeError, ConnectionResetError):   # Stop pressed or the tab was closed
             pass
         except (requests.RequestException, ValueError):
             self.wfile.write("\n\n[The local AI stopped unexpectedly. Please try again.]".encode())
         finally:
             r.close()
+            reply = "".join(parts).strip()        # keep whatever was written, even a partial answer
+            if reply:
+                db.add_chat("assistant", reply)
+            else:
+                db.delete_chat(uid)
 
     def do_POST(self):
         u = urlparse(self.path)
@@ -220,6 +230,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, plan())
             if u.path == "/api/chat":
                 return self._chat(data)
+            if u.path == "/api/chat/clear":
+                db.clear_chat()
+                return self._send(200, {})
+            if u.path == "/api/shutdown":
+                self._send(200, {"ok": True})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             self._send(404, {"error": "Not found."})
         except (RuntimeError, ValueError, OSError, requests.RequestException) as exc:
             self._send(400, {"error": str(exc)})
@@ -228,9 +245,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 7860) -> None:
+    try:
+        db.backup_db()                                  # snapshot of the previous session
+    except Exception:
+        pass
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"Benthoven is running at http://127.0.0.1:{port}  (press Ctrl+C to stop)")
+    print(f"Benthoven is running at http://127.0.0.1:{port}  (press Ctrl+C or use 'Save & quit' to stop)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        srv.server_close()
+        try:
+            print(f"Progress saved. Backup copy: {db.backup_db()}")
+        except Exception as exc:
+            print(f"Progress is saved in the database (backup skipped: {exc})")
