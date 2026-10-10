@@ -14,7 +14,7 @@ Benthoven is an offline academic planner. It reads assignment announcements (pas
 | Where is user data stored? | A local SQLite file, `data/benthoven.db`. |
 | What network addresses does the app contact? | Only `127.0.0.1` (its own page) and `localhost:11434` (Ollama). |
 | Were third-party images, icons, fonts or UI kits bundled? | **No.** |
-| Was AI used to build it? | **Yes.** Claude (Anthropic), see section 6. |
+| Was AI used to build it? | **Yes.** Claude (Anthropic), ChatGPT (OpenAI) and Gemini (Google), see section 6. |
 
 ## 2. AI models
 
@@ -62,7 +62,7 @@ No web framework (such as Gradio, Flask or FastAPI) and no data library (such as
 
 | Item | Source |
 |---|---|
-| Application code (`app.py`, `benthoven/`), tests, `preflight.py` | Written for this project with Claude's help (section 6). **[confirm: no other existing code was reused]** |
+| Application code (`app.py`, `benthoven/`), tests, `preflight.py` | Written for this project with AI assistance (section 6). **[confirm: no other existing code was reused]** |
 | Date parsing, scheduler, priority ranking, `.ics` calendar export | Hand-written. No date-parsing or calendar library is used. |
 | Web page (`static/index.html`) | Hand-written HTML, CSS and plain JavaScript. No JavaScript libraries, CDNs or external scripts. |
 | Visual design | The layout (cover banner, task chart, task table with tabs) was modeled on a screenshot of a Notion-style "Task Manager" page that the team supplied. No Notion code, images or assets were copied. The cover and icon are drawn with CSS. |
@@ -75,7 +75,7 @@ No web framework (such as Gradio, Flask or FastAPI) and no data library (such as
 ## 6. AI development tools
 
 - **Claude (Anthropic)**, used in the claude.ai chat interface to review the code, fix bugs, write tests, rebuild the user interface, and draft documentation, including this file.
-- **[confirm and list any other AI tools the team used, or write "none"]**
+- **ChatGPT (OpenAI)** and **Gemini (Google)**, used as additional AI assistants during development. **[describe what each was used for, e.g. brainstorming, debugging, drafting text]**
 - **[confirm: the team ran, tested and reviewed the result]**
 
 Tools used only while developing and testing, and not part of the app: Playwright with Chromium (to take screenshots of the page and click through it), and a small script that runs the pytest tests without pytest installed.
