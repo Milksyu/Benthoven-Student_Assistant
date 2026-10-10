@@ -166,6 +166,7 @@ Wait for pip to finish. If installation fails, read the first error message and 
 2. Download and run the current 64-bit installer.
 3. Keep English language data selected if your announcements are in English.
 4. If the installer does not add Tesseract to PATH, add its installation directory—commonly `C:\Program Files\Tesseract-OCR`—to your Windows PATH.
+   Benthoven also looks in that default folder on its own. If the page still shows **OCR ⚠️ not installed**, see [Troubleshooting](#image-upload-says-tesseract-is-not-installed).
 5. Close and reopen PowerShell, then verify the installation:
 
 ```powershell
@@ -488,7 +489,22 @@ Run the temporary, current-terminal workaround in the Windows installation secti
 
 ### Image upload says Tesseract is not installed
 
-Run `tesseract --version`. If the command is not found, install Tesseract and add its installation folder to PATH. Restart the terminal and launch Benthoven again. You can still paste text or use `.txt` / `.md` files without OCR.
+You may see this as **OCR ⚠️ not installed** at the top of the page, or as a message when you upload an image. You can still paste text or use `.txt` / `.md` files without OCR.
+
+**Windows quick fix.** The Tesseract installer puts the program in `C:\Program Files\Tesseract-OCR` but does not always add that folder to PATH. In the PowerShell window where your virtual environment is active (it shows `(.venv)`), run:
+
+```powershell
+$env:Path += ";C:\Program Files\Tesseract-OCR"
+python app.py
+```
+
+Then refresh the browser page (Ctrl+F5). The chip should change to **OCR ✅**.
+
+- This only lasts for that PowerShell window. Repeat it each time you open a new one, or add the folder to your Windows PATH permanently: search the Start menu for "Edit the system environment variables", open **Environment Variables**, select **Path**, click **Edit**, then **New**, and paste `C:\Program Files\Tesseract-OCR`. Reopen PowerShell afterwards.
+- If you installed Tesseract in a different folder, use that folder instead, or point Benthoven at the program directly: `$env:TESSERACT_CMD = "D:\path\to\tesseract.exe"` and then `python app.py`.
+- To confirm Tesseract itself works, run `& "C:\Program Files\Tesseract-OCR\tesseract.exe" --version`. If that prints a version number, it is installed correctly.
+
+**macOS / Linux.** Run `tesseract --version`. If the command is not found, install Tesseract (see the installation steps above), restart the terminal and launch Benthoven again.
 
 ### Ollama or the required model is unavailable
 
