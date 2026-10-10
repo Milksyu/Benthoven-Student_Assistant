@@ -136,7 +136,7 @@ The result should show Python 3.11.x or 3.12.x. If `py` is not recognized, insta
 Run these commands from the project folder:
 
 ```powershell
-py -3.14-m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
@@ -217,7 +217,7 @@ Adjust the path if you extracted it somewhere else.
 ### 2. Create and activate a virtual environment
 
 ```bash
-python3.14-m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 ```
 
